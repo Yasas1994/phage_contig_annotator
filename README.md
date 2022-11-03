@@ -5,7 +5,7 @@ Annotates genes on putative phage contigs with protein orthologous groups using 
 
 1) install git lfs https://git-lfs.github.com/ <br>
 2) clone repository ``` git clone https://github.com/Yasas1994/phage_contig_annotator.git  ```
-3) create a conda environment ```conda create --name phage_contig_annotator --file requirements.txt```
+3) create a conda environment ```conda env create -f environment.yml```
 
 
 ## usage
