@@ -303,7 +303,7 @@ def run_hhblits_omp(out, db, faa,threads=0, evalue=0.001):
     return return_code == 0
 
 
-def run_hmmsearch(out, db, faa, threads=0, evalue=10):
+def run_hmmsearch(out, db, faa, threads=2, evalue=10):
     cmd = "hmmsearch "
     cmd += "--noali "
     cmd += "-o /dev/null "
