@@ -348,7 +348,7 @@ def search_hmms(tmp_dir, threads, db_dir):
             if not x:
                 splits.append(split)
     # run hmmer
-    logging.info('running hhmsearch')
+    logging.info('running hmmsearch')
     args_list = []
     for split in splits:
         out = os.path.join(hmm_dir, f"{split}.hmmout")
