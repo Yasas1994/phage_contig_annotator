@@ -22,10 +22,11 @@ import numpy as np
 from BCBio import GFF
 import pickle
 from dna_features_viewer import BiopythonTranslator
+import matplotlib
 import matplotlib.pyplot as plt
 import os
 
-
+matplotlib.use('Agg')
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO,datefmt="%d-%b-%y %H:%M:%S")
 
 #Most things are shamelessly copied from checkv
