@@ -580,5 +580,5 @@ def generate_plots(tmp_dir, hmmsearch_dir, meta_dir,gff_dir):
             ax.set_title(i.id)
             out_name = os.path.join(plots_dir, f"{i.id}.png")
             ax.figure.savefig(out_name, bbox_inches='tight')
-            plt.close()
+            plt.close(fig)
 
