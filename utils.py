@@ -527,7 +527,10 @@ def parse_hmmsearch(path):
         for line in f:
             if not line.startswith("#"):
                 values = line.split()
-                yield dict([(names[i], formats[i](values[i])) for i in range(10)])
+                try:
+                    yield dict([(names[i], formats[i](values[i])) for i in range(10)])
+                except:
+                    print("skipping erroneous line")
 
 def generate_plots(tmp_dir, hmmsearch_dir, meta_dir,gff_dir):    
     #check if tmp/plots exists, eles create the dir
