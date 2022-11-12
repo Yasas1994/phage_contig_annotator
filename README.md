@@ -4,6 +4,8 @@ Annotates genes on putative phage contigs with protein orthologous groups using 
 ## installation 
 
 1) clone the repository ```git clone  && cd phage_contig_annotator```
+2) download hmmdb ```wget https://nextcloud.uni-greifswald.de/index.php/s/w2pgjQXdifsCtGA```
+3) unzip hmmdb ```unzip databases.zip -d databases && rm databases.zip```
 2) create a conda environment ```conda env create -f environment.yml```
 
 
