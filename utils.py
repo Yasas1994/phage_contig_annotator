@@ -601,10 +601,11 @@ def generate_plots(tmp_dir, hmmsearch_dir, meta_dir,gff_dir):
             tmp = results_filtered.query(f"contig == '{i.id}'")
             for pos,feature in enumerate(i.features):
                 
-                tmp_feature = tmp.query(f"position == {pos}")[["category","color","annot"]]
+                tmp_feature = tmp.query(f"position == {pos}")[["category","color","annot","score","eval"]]
                 if not tmp_feature.empty:
                     #print(tmp_feature["annot"])
-                    feature.qualifiers.update({"label":tmp_feature["annot"].values[0]})
+                    feature.qualifiers.update({"label":tmp_feature["annot"].values[0] + ' '
+                                           + str(tmp_feature["score"].values[0])})
                     feature.qualifiers.update({"color":tmp_feature["color"].values[0]})
                 else:
                     feature.qualifiers.update({"label":"unknown function"})
@@ -620,5 +621,6 @@ def generate_plots(tmp_dir, hmmsearch_dir, meta_dir,gff_dir):
             ax.set_title(i.id)
             out_name = os.path.join(plots_dir, f"{i.id}.png")
             ax.figure.savefig(out_name, bbox_inches='tight')
-            plt.close(fig)
+            plt.clf()
+            plt.close("all")
 
