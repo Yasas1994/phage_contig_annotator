@@ -219,7 +219,7 @@ def read_fasta(path):
 
 
 def run_prodigal(out):
-    cmd = "prodigal "
+    cmd = "prodigal-gv "
     cmd += " -m "
     cmd += "-p meta "
     cmd += f"-i {out}.fna "
@@ -234,6 +234,19 @@ def run_prodigal(out):
     return_code = p.wait()
     return return_code == 0
 
+def run_trnascan(out):
+    cmd = "tRNAscan-SE "
+    cmd += " -G "
+    cmd += "-p meta "
+    cmd += f"-o {out}_trnascan.tsv "
+    cmd += f"-i {out}.fna "
+    cmd += "1> /dev/null "
+    cmd += f"2> {out}.log"
+    with open(f"{out}.cmd", "w") as file:
+        file.write(cmd + "\n")
+    p = sp.Popen(cmd, shell=True)
+    return_code = p.wait()
+    return return_code == 0
 
 def run_diamond(out, db, faa, tmp, threads):
     cmd = "diamond blastp "
@@ -424,7 +437,7 @@ def search_hmms_hhsuite(tmp_dir, threads, db_dir):
             wh.write(line.strip('\x00'))
     
 
-def call_genes(in_fna, out_dir, threads):
+def call_genes(in_fna, out_dir, threads,trna=True):
     # make tmp dir
     logging.info('gene calling started')
     tmp = f"{out_dir}/tmp/proteins"
@@ -458,6 +471,19 @@ def call_genes(in_fna, out_dir, threads):
         sys.exit(
             logging.error(f"\nError: {num_fails} prodigal tasks failed. Program should be rerun.")
         )
+    if trna:
+        logging.info('calling trna genes')
+        args_list = []
+        for i in range(1, iteration + 1):
+            out = os.path.join(tmp, str(i))
+            args_list.append([out])
+        results = async_parallel(run_trnascan, args_list, threads)
+        if not all(results):
+            num_fails = len(results) - sum(results)
+            sys.exit(
+                logging.error(f"\nError: {num_fails} tRNAscan-SE tasks failed. Program should be rerun.")
+            )
+
     # cat output faa
     # mapping = dict()
     with open(f"{tmp}.faa", "w") as f:
@@ -486,6 +512,19 @@ def call_genes(in_fna, out_dir, threads):
                     for index,line in enumerate(subf):
                         if index > 0:
                             f.write(line)
+    #cat output trnascan
+    with open(f"{tmp}_trnascan.tsv", "w") as f:
+        for i in range(1, iteration + 1):
+            # avoid trying to read empty fasta file
+            if i <= threads:
+                with open(os.path.join(tmp, f"{i}_trnascan.tsv")) as subf:
+                    j = 0
+                    for line in subf:
+                        #if line[0] == '>':
+                            #j += 1
+                            #linex = line.split('cov')[0] + f'{j}\n'
+                            #mapping[line] = linex
+                        f.write(line)
 
 
 def parse_blastp(path):
