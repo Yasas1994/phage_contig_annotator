@@ -17,11 +17,13 @@ import pickle
 import numpy as np
 import psutil
 from Bio import SeqIO
+from Bio.SeqFeature import SeqFeature, FeatureLocation
 import pandas as pd
 import numpy as np
 from BCBio import GFF
 import pickle
 from dna_features_viewer import BiopythonTranslator
+
 import matplotlib
 import matplotlib.pyplot as plt
 import os
@@ -595,8 +597,26 @@ def parse_trna(path):
                     yield dict([(names[i], formats[i](values[i])) for i in range(9)])
                 except Exception as e:
                     print(f"{e}/;skipping erroneous line")
-                    
-def generate_plots(tmp_dir, hmmsearch_dir, meta_dir,gff_dir):    
+def get_cordinates(x):
+    if x['begin'] > x['end']:
+        return pd.Series([x["qname"],x["trna_no"],x['end'],x['begin'],-1,x["trna_type"],x["score"]], index=["contig","trna_no","begin","end","strand","trna_type","score"])
+    else:
+        return pd.Series([x["qname"],x["trna_no"],x['begin'],x['end'],1,x["trna_type"],x["score"]], index=["contig","trna_no","begin","end","strand","trna_type","score"])
+
+def create_feature(x):
+    qualifiers = {
+        "source": "tRNAscan-SE",
+        "score": x["score"],
+        "trna_type": x["trna_type"],
+        "score" : x["score"],
+        "label" : x["trna_type"]+"_tRNA",
+        "ID": "trna_"+str(x["trna_no"]),
+    }
+
+    return (SeqFeature(FeatureLocation(x["begin"], x["end"]), type="tRNA",id=str(x["trna_no"]), strand=x["strand"], qualifiers=qualifiers))
+
+
+def generate_plots(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir,gff_dir):    
     #check if tmp/plots exists, eles create the dir
     
     plots_dir = os.path.join(tmp_dir, "plots")
@@ -611,7 +631,8 @@ def generate_plots(tmp_dir, hmmsearch_dir, meta_dir,gff_dir):
     results_with_annotate = search_results.merge(phrogs_anno, how='inner', left_on='tname', right_on='phrog')
     results_with_annotate['position'] = results_with_annotate['qname'].apply(lambda x: int(x.split('_')[-1]))
     results_with_annotate['contig'] = results_with_annotate['qname'].apply(lambda x: x.rsplit('_',1)[0])
-
+    trna=pd.DataFrame(parse_trna(trna_dir))
+    trna=trna.apply(lambda x : get_cordinates(x) , axis=1).sort_values(by=["contig","begin"])
     results_filtered = results_with_annotate.iloc[results_with_annotate.groupby('qname')['score'].idxmax()]
 
 
@@ -623,6 +644,8 @@ def generate_plots(tmp_dir, hmmsearch_dir, meta_dir,gff_dir):
             
             
             tmp = results_filtered.query(f"contig == '{i.id}'")
+            tmp_trna = trna.query(f"contig == '{i.id}'")
+            tmp_trna=tmp_trna.reset_index(drop=True)
             for pos,feature in enumerate(i.features):
                 
                 tmp_feature = tmp.query(f"position == {pos}")[["category","color","annot","score","eval"]]
@@ -634,12 +657,17 @@ def generate_plots(tmp_dir, hmmsearch_dir, meta_dir,gff_dir):
                 else:
                     feature.qualifiers.update({"label":"unknown function"})
                     feature.qualifiers.update({"color": "#c9c9c9"})
+            #create trna features
+            if not tmp_trna.empty:
+                tmp_trna["feature"]=tmp_trna.apply(lambda x : create_feature(x), axis=1)
+                i.features.extend(tmp_trna["feature"].to_list())
+            #write updated to gff record to a file
             graphic_record = BiopythonTranslator().translate_record(i)
             GFF.write([i], out_handle)
             for feat in graphic_record.features: #turns off the labels of cds' without annotations
                 if feat.label == "unknown function":
                     feat.label =None
-            fig, ax1 = plt.subplots(1, 1, figsize=(15, 5))
+            fig, ax1 = plt.subplots(1, 1, figsize=(15, 4))
             fig.tight_layout(pad=2.5) 
             ax, _ = graphic_record.plot(ax=ax1, strand_in_label_threshold=7,annotate_inline=False,figure_height=3 )
             ax.set_title(i.id)
