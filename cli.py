@@ -39,7 +39,8 @@ tmp_dir = f'{args.output}/tmp'
 hmmsearch_dir = f'{args.output}/tmp/hmmsearch.txt'
 meta_dir = f'{libpath}/databases/meta/phrog_annot_v3.tsv'
 gff_dir = f'{args.output}/tmp/proteins.gff'
+trna_dir = f'{args.output}/tmp/proteins_trnascan.tsv'
 call_genes(f'{args.input}', f'{args.output}', 12)
 search_hmms(tmp_dir, threads=12, db_dir=f'{libpath}/databases/hmmerdb/hmm_db_with_annot')
 #search_hmms_hhsuite(tmp_dir, threads=2, db_dir='../databases/hhdb/phrogs_with_annot')
-generate_plots(tmp_dir, hmmsearch_dir, meta_dir, gff_dir)
+generate_plots(tmp_dir, hmmsearch_dir,trna_dir, meta_dir, gff_dir)
