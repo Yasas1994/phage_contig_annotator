@@ -572,6 +572,30 @@ def parse_hmmsearch(path):
                 except:
                     print("skipping erroneous line")
 
+#parse tRNAscan-SE output file
+def parse_trna(path):
+    with open(path) as f:
+        names = [
+            "qname",
+            "trna_no",
+            "begin",
+            "end",
+            "trna_type",
+            "anticodon",
+            "intron_begin",
+            "intron_end",
+            "score",
+            "bias",
+        ]
+        formats = [str, int, int, int, str, str, int, int, float]
+        for line in f:
+            if not (line.startswith("Sequence") or line.startswith("Name") or line.startswith("-----")):
+                values = line.split()
+                try:
+                    yield dict([(names[i], formats[i](values[i])) for i in range(9)])
+                except Exception as e:
+                    print(f"{e}/;skipping erroneous line")
+                    
 def generate_plots(tmp_dir, hmmsearch_dir, meta_dir,gff_dir):    
     #check if tmp/plots exists, eles create the dir
     
