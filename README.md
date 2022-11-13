@@ -8,7 +8,7 @@ Annotates genes on putative phage contigs with a database of hidden markov model
 ## installation 
 
 1) clone the repository ```git clone https://github.com/Yasas1994/phage_contig_annotator.git && cd phage_contig_annotator```
-2) download hmmdb ```wget https://nextcloud.uni-greifswald.de/index.php/s/w2pgjQXdifsCtGA```
+2) download hmmdb ```wget https://nextcloud.uni-greifswald.de/index.php/s/w2pgjQXdifsCtGA/download/databases.zip```
 3) unzip hmmdb ```unzip databases.zip -d databases && rm databases.zip```
 2) create a conda environment ```conda env create -f environment.yml```
 
