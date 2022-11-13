@@ -609,7 +609,7 @@ def generate_plots(tmp_dir, hmmsearch_dir, meta_dir,gff_dir):
                     feature.qualifiers.update({"color":tmp_feature["color"].values[0]})
                 else:
                     feature.qualifiers.update({"label":"unknown function"})
-                    feature.qualifiers.update({"color": '#c9c9c9'})
+                    feature.qualifiers.update({"color": "#c9c9c9"})
             graphic_record = BiopythonTranslator().translate_record(i)
             GFF.write([i], out_handle)
             for feat in graphic_record.features: #turns off the labels of cds' without annotations
