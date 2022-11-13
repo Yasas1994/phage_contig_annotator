@@ -18,3 +18,4 @@ python cli.py --input input_fasta_file_with_contigs --output output_dir
 ## examples 
 ![image](https://user-images.githubusercontent.com/34155351/201523981-1f5f2fd0-5177-417e-aea0-752430c7eb80.png)
 ![image](https://user-images.githubusercontent.com/34155351/201524028-13f35b46-83fb-4c50-af81-3701ef992e48.png)
+![image](https://user-images.githubusercontent.com/34155351/201524110-c4919fd4-aa34-449b-9ba1-7081a278d6af.png)
