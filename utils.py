@@ -335,9 +335,9 @@ def run_hmmsearch(out, db, faa, threads=2, evalue=10):
     return_code = p.wait()
     return return_code == 0
 
-def search_hmms(tmp_dir, threads, db_dir):
+def search_hmms(tmp_dir,prefix,threads, db_dir):
     # make tmp
-    hmm_dir = os.path.join(tmp_dir, "hmmsearch")
+    hmm_dir = os.path.join(tmp_dir, f"{prefix}_hmmsearch")
     if not os.path.exists(hmm_dir):
         os.makedirs(hmm_dir)
     # list faa files
@@ -347,30 +347,37 @@ def search_hmms(tmp_dir, threads, db_dir):
         if file.split(".")[-1] == "faa"
     ]
     # list splits to process
-    splits = []
-    for file in os.listdir(db_dir):
-        split = file.split(".")[0]
-        out = os.path.join(hmm_dir, f"{split}.hmmout")
-        # file doesn't exist; add to list for processing
-        if not os.path.exists(out):
-            splits.append(split)
-        # check if file is complete
-        else:
-            x = False
-            with open(out) as subf:
-                for line in subf:
-                    if line == "# [ok]\n":
-                        x = True
-            if not x:
-                splits.append(split)
+    # splits = []
+    # for file in os.listdir(db_dir):
+    #     split = file.split(".")[0]
+    #     out = os.path.join(hmm_dir, f"{split}.hmmout")
+    #     # file doesn't exist; add to list for processing
+    #     if not os.path.exists(out):
+    #         splits.append(split)
+    #     # check if file is complete
+    #     else:
+    #         x = False
+    #         with open(out) as subf:
+    #             for line in subf:
+    #                 if line == "# [ok]\n":
+    #                     x = True
+    #         if not x:
+    #             splits.append(split)
     # run hmmer
+    # print(splits)
     logging.info('running hmmsearch')
     args_list = []
-    for split in splits:
-        out = os.path.join(hmm_dir, f"{split}.hmmout")
-        hmmdb = os.path.join(db_dir, f"{split}.hmm")
-        faa = os.path.join(tmp_dir, "proteins.faa")
-        args_list.append([out, hmmdb, faa])
+    # for split in splits:
+    #     out = os.path.join(hmm_dir, f"{split}.{prefix}.hmmout")
+    #     hmmdb = os.path.join(db_dir, f"{split}.hmm")
+    #     faa = os.path.join(tmp_dir, "proteins.faa")
+    #     args_list.append([out, hmmdb, faa])
+    for f in faa:
+        split=f.split('.')[0]
+    out = os.path.join(hmm_dir, f"proteins.{prefix}.hmmout")
+    hmmdb = db_dir
+    faa = os.path.join(tmp_dir, "proteins.faa")
+    args_list.append([out, hmmdb, faa]) 
     results = async_parallel(run_hmmsearch, args_list, threads)
     if not all(results):
         num_fails = len(results) - sum(results)
@@ -395,9 +402,9 @@ def search_hmms(tmp_dir, threads, db_dir):
         )
     # cat output
     logging.info('gathering search results')
-    with open(os.path.join(tmp_dir, "hmmsearch.txt"), "w") as f:
+    with open(os.path.join(tmp_dir, f"hmmsearch.{prefix}.txt"), "w") as f:
         for file in os.listdir(hmm_dir):
-            if file.split(".")[-1] == "hmmout":
+            if file.split(".",1)[-1] == f"{prefix}.hmmout":
                 with open(os.path.join(hmm_dir, file)) as subf:
                     for line in subf:
                         f.write(line)
@@ -633,7 +640,7 @@ def generate_plots(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir,gff_dir):
     results_with_annotate['contig'] = results_with_annotate['qname'].apply(lambda x: x.rsplit('_',1)[0])
     trna=pd.DataFrame(parse_trna(trna_dir))
     trna=trna.apply(lambda x : get_cordinates(x) , axis=1).sort_values(by=["contig","begin"])
-    results_filtered = results_with_annotate.iloc[results_with_annotate.groupby('qname')['score'].idxmax()]
+    results_filtered = results_with_annotate.iloc[results_with_annotate.groupby('qname')['score'].idxmax()].query('score > 50')
 
 
     logging.info('generating annotation plots')
