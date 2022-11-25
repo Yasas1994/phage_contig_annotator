@@ -631,6 +631,17 @@ def generate_plots(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir,gff_dir):
         os.makedirs(plots_dir)
     #process hmmsearch results
     logging.info('processing hmm results')
+    search_results=pd.DataFrame(parse_hmmsearch(hmmsearch_dir))
+    trna=pd.DataFrame(parse_trna(trna_dir))
+    if search_results.empty:
+        sys.stderr.write('Exiting because hmmsearch returned zero matches!')
+        sys.exit( )
+    
+    if not trna.empty:
+        trna=trna.apply(lambda x : get_cordinates(x) , axis=1).sort_values(by=["contig","begin"])
+    else:
+        trna = None
+
     phrogs_anno=pd.read_table(meta_dir)
     phrogs_anno=phrogs_anno.fillna('unknown function')
     search_results=pd.DataFrame(parse_hmmsearch(hmmsearch_dir))
@@ -638,8 +649,7 @@ def generate_plots(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir,gff_dir):
     results_with_annotate = search_results.merge(phrogs_anno, how='inner', left_on='tname', right_on='phrog')
     results_with_annotate['position'] = results_with_annotate['qname'].apply(lambda x: int(x.split('_')[-1]))
     results_with_annotate['contig'] = results_with_annotate['qname'].apply(lambda x: x.rsplit('_',1)[0])
-    trna=pd.DataFrame(parse_trna(trna_dir))
-    trna=trna.apply(lambda x : get_cordinates(x) , axis=1).sort_values(by=["contig","begin"])
+    
     results_filtered = results_with_annotate.iloc[results_with_annotate.groupby('qname')['score'].idxmax()].query('score > 50')
 
 
@@ -651,8 +661,7 @@ def generate_plots(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir,gff_dir):
             
             
             tmp = results_filtered.query(f"contig == '{i.id}'")
-            tmp_trna = trna.query(f"contig == '{i.id}'")
-            tmp_trna=tmp_trna.reset_index(drop=True)
+
             for pos,feature in enumerate(i.features):
                 
                 tmp_feature = tmp.query(f"position == {pos}")[["category","color","annot","score","eval"]]
@@ -665,9 +674,12 @@ def generate_plots(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir,gff_dir):
                     feature.qualifiers.update({"label":"unknown function"})
                     feature.qualifiers.update({"color": "#c9c9c9"})
             #create trna features
-            if not tmp_trna.empty:
-                tmp_trna["feature"]=tmp_trna.apply(lambda x : create_feature(x), axis=1)
-                i.features.extend(tmp_trna["feature"].to_list())
+            if trna is not None:
+                tmp_trna = trna.query(f"contig == '{i.id}'")
+                tmp_trna=tmp_trna.reset_index(drop=True)
+                if not tmp_trna.empty:
+                    tmp_trna["feature"]=tmp_trna.apply(lambda x : create_feature(x), axis=1)
+                    i.features.extend(tmp_trna["feature"].to_list())
             #write updated to gff record to a file
             graphic_record = BiopythonTranslator().translate_record(i)
             GFF.write([i], out_handle)
