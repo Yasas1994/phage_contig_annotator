@@ -652,7 +652,6 @@ def generate_plots(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir,gff_dir):
     
     results_filtered = results_with_annotate.iloc[results_with_annotate.groupby('qname')['score'].idxmax()].query('score > 50')
 
-
     logging.info('generating annotation plots')
     gff_out_dir = os.path.join(tmp_dir, "proteins_annot.gff")
     with open(gff_out_dir, "w") as out_handle:
@@ -662,17 +661,20 @@ def generate_plots(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir,gff_dir):
             
             tmp = results_filtered.query(f"contig == '{i.id}'")
 
-            for pos,feature in enumerate(i.features):
-                
-                tmp_feature = tmp.query(f"position == {pos}")[["category","color","annot","score","eval"]]
+            for pos,feature in enumerate(i.features, start=1):
+                tmp_feature = tmp.query(f"position == {pos}")[["category","color","annot","phrog","score","eval"]]
                 if not tmp_feature.empty:
                     #print(tmp_feature["annot"])
-                    feature.qualifiers.update({"label":tmp_feature["annot"].values[0] + ' '
-                                           + str(tmp_feature["score"].values[0])})
+                    feature.qualifiers.update({"label":tmp_feature["annot"].values[0]})
+                    feature.qualifiers.update({"category":tmp_feature["category"].values[0]})
+                    feature.qualifiers.update({"eval":tmp_feature["eval"].values[0]})
+                    feature.qualifiers.update({"score":tmp_feature["score"].values[0]})
                     feature.qualifiers.update({"color":tmp_feature["color"].values[0]})
+                    feature.qualifiers.update({"phrog":tmp_feature["phrog"].values[0]})
                 else:
                     feature.qualifiers.update({"label":"unknown function"})
                     feature.qualifiers.update({"color": "#c9c9c9"})
+                
             #create trna features
             if trna is not None:
                 tmp_trna = trna.query(f"contig == '{i.id}'")
