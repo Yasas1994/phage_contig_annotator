@@ -6,19 +6,19 @@ channels:
 dependencies:
   - argon2-cffi=21.3.0
   - argon2-cffi-bindings=21.2.0
-  - biopython>=1.79
-  - diamond>=2
-  - hhsuite>=3.3.0
-  - hmmer>=3.3.2
-  - numpy>=1.23
-  - pandas>=1.5
+  - "biopython>=1.79"
+  - "diamond>=2"
+  - "hhsuite>=3.3.0"
+  - "hmmer>=3.3.2"
+  - "numpy>=1.23"
+  - "pandas>=1.5"
   - pip
   - prodigal
   - prodigal-gv
-  - python>=3.9,<3.11
-  - scipy>=1.9.3
-  - seaborn>=0.12
-  - trnascan-se=2.0.9
+  - "python>=3.9,<3.11"
+  - "scipy>=1.9.3"
+  - "seaborn>=0.12"
+  - "trnascan-se=2.0.9"
 
   - pip:
     - bcbio-gff
