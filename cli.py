@@ -2,46 +2,179 @@ import glob
 import os
 import sys
 import argparse
-from utils import call_genes, search_hmms, search_hmms_hhsuite, parse_hmmsearch, generate_plots
+from utils import * #call_genes, search_hmms, search_hmms_hhsuite, parse_hmmsearch, generate_plots_and_gff, run_combine
+from pathlib import Path
+import subprocess
 
 libpath=os.path.dirname(os.path.realpath(__file__))
-def dir_path(path):
-    '''checks path and creates if absent'''
-    if os.path.isdir(path):
-        return path
-    else:
-        os.mkdir(path)
-        return path
 
+parser = argparse.ArgumentParser(description='A pipeline to annotate genes in phage contigs with phrogs and VOGs\n')
 
-def file_path(path):
-    '''checks if file is present'''
-    if os.path.isfile(path):
-        return path
-    else:
-        raise argparse.ArgumentTypeError(f"ERROR:{path} is not a valid file")
+parser.add_argument("--cpus",
+                    type = int,
+                    required=False,
+                    default=8,
+                    help='set the number of cpus to use')
 
-parser = argparse.ArgumentParser(description='Annotate and visualize phage contigs\n')
+parser.add_argument("--type",
+                     required=False,
+                     default='contigs',
+                     help='define the input type default:contigs, options:[contigs,proteins]')
 
-parser.add_argument("-i","--input",
-                    type=file_path,
+subparsers = parser.add_subparsers(help='mode', dest='command')
+parser1 = subparsers.add_parser('runall', help='run the entire pipeline')
+parser1.add_argument("-i","--input",
+                    type=is_valid_file_path,
                     required=True,
                     help="path to input fasta file with putative ")
-parser.add_argument("-o","--output", 
-                    type=dir_path,
+parser1.add_argument("--contigs",
+			required=False,
+			action='store_true',
+			default=False,
+			help='predict proteins')
+parser1.add_argument("-o","--output", 
+                    type=is_valid_dir,
                     required=True,
                     help='path to output dir')
+parser1.add_argument("-db",
+                    required=False,
+                    type=is_valid_dir,
+                    help='use a custom hmm database')
+#run custom 
+parser2 = subparsers.add_parser('custom', help='run a custom pipeline')
+parser2.add_argument('--run_prodigal',
+                    required=False,
+                    action='store_true',
+                    default=False,
+                    help='runs prodigal')
+parser2.add_argument('--run_hmmer',
+                    required=False,
+                    action='store_true',
+                    default=False,
+                    help='runs hmmer, input should contain valid protein sequences')
+parser2.add_argument('--run_combine',
+                    required=False,
+                    action='store_true',
+                    default=False,
+                    help='runs combine.py, merges all results to a single file')
+parser2.add_argument('--run_blast',
+                    required=False,
+                    action='store_true',
+                    default=False,
+                    help='runs blastp, input should contain valid protein sequences')
+parser2.add_argument('--run_diamond',
+                    required=False,
+                    action='store_true',
+                    default=False,
+                    help='runs diamond blastp,input should contain valid protein sequences')
+parser2.add_argument('--run_trnascan',
+                    required=False,
+                    action='store_true',
+                    default=False,
+                    help='runs trnascan, input should contain valid protein sequences')
+parser2.add_argument("-i","--input",
+                    type=is_valid_file_path,
+                    required=True,
+                    help="path to input fasta file with putative ")
+parser2.add_argument("-o","--output", 
+                    type=is_valid_dir,
+                    required=True,
+                    help='path to output dir')
+parser2.add_argument("-db",
+                    required=False,
+                    type=is_valid_dir,
+                    help='use a custom hmm database')
 
 args = parser.parse_args()
 
+if len(sys.argv) == 1:
+    
+    parser.print_help()
+    sys.exit(1)
 
-tmp_dir = f'{args.output}/tmp'
-hmmsearch_dir = f'{args.output}/tmp/hmmsearch.phrogs.txt'
-meta_dir = f'{libpath}/databases/meta/phrog_annot_v3.tsv'
-gff_dir = f'{args.output}/tmp/proteins.gff'
-trna_dir = f'{args.output}/tmp/proteins_trnascan.tsv'
-call_genes(f'{args.input}', f'{args.output}', 12)
-#phrogs
-search_hmms(tmp_dir,'phrogs' ,threads=12, db_dir=f'{libpath}/databases/hmmerdb/hmm_db_with_annot/phrogs.hmm')
-search_hmms(tmp_dir,'vogp' ,threads=12, db_dir='../databases/hmmerdb/vog-hmms/vogp.hmm')
-generate_plots(tmp_dir, hmmsearch_dir,trna_dir, meta_dir, gff_dir)
+logger = get_logger(quiet=False)
+logger.info('phage_contig_annotator is a simple pipeline to add PHROG annotations to phage contigs')
+
+if args.db:
+    db_dir = args.db
+else:
+    db_dir = f'{libpath}/databases'
+
+#search all subdirectories and determine how many dbs are avaiable
+hmmerdb = dict()
+blastdb = dict()
+diamonddb = dict()
+meta_path = str
+for path in glob.glob(db_dir+'/*'):
+    # print(path)
+    if 'hmmerdb' in path:
+        logger.info('hmmerdb found')
+        db_name = path.split('/')[-1].split('_')[0]
+        hmmerdb[db_name] = f"{path}"
+
+    if 'blastdb' in path:
+        logger.info('blastdb found')
+        db_name = dbname(path)
+        blastdb = f"{path}/{db_name}"
+
+    if 'diamond' in path:
+        logger.info('diamond_db found')
+        db_name = dbname(path)
+        diamonddb = f"{path}/{db_name}"
+
+    if 'meta' in path:
+        logger.info('metadata file found')
+        meta_path = glob.glob(path+'/phrog_annot_v4.tsv')[0]
+
+#tmp dirs and file names
+fname = args.input.split('/')[-1].rsplit('.',1)[0]
+tmp_dir = f'{os.path.abspath(args.output)}/{fname}'
+
+fna_dir = f'{tmp_dir}/fna'
+prot_dir = f"{tmp_dir}/proteins" #this can be done inside the call genes funciton
+
+hmmsearch_dirs={}
+for key in hmmerdb.keys():
+    hmmsearch_dirs[key] = f"{tmp_dir}/hmmsearch_{key}"
+
+plots_dir= f"{tmp_dir}/plots"
+combine_dir = f"{tmp_dir}/combined"
+
+#creating dir
+for i in hmmsearch_dirs.values():
+    Path(i).mkdir(parents=True, exist_ok=True)
+
+Path(plots_dir).mkdir(parents=True, exist_ok=True)
+Path(combine_dir).mkdir(parents=True, exist_ok=True)
+
+if args.type != 'contigs':
+    #create a symlobic link to the input file in tmp dir
+    try:
+        os.symlink(os.path.abspath(args.input), f"{tmp_dir}/proteins.faa")
+    except:
+        logger.warning('symlink exists')
+    
+
+gff_path = f'{tmp_dir}/proteins.gff' #path to save .gff 
+Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+
+if args.command == 'runall':
+    if args.contigs:
+        
+        call_genes(f'{args.input}', threads=args.cpus, tmp_dir=tmp_dir, trna=True)
+    for key in hmmerdb.keys(): #run hmmsearch for all available databases 
+        search_hmms(hmmout_dir=hmmsearch_dirs[key],proteins_dir=prot_dir, threads=args.cpus, db_dir=hmmerdb[key], tmp_dir=tmp_dir)
+    generate_plots_and_gff(tmp_dir=tmp_dir,trna_dir=f'{tmp_dir}/trna.tsv',  hmmsearch_dir=f'{tmp_dir}/hmmsearch.txt', meta_dir=meta_path, gff_dir=gff_path,) 
+
+elif args.command == 'custom':
+    if args.run_prodigal:
+        call_genes(f'{args.input}', threads=args.cpus,tmp_dir=tmp_dir,trna=args.run_trnascan)
+    if args.run_hmmer:
+        for key in hmmerdb.keys():
+            search_hmms(hmmout_dir=hmmsearch_dirs[key],proteins_dir=prot_dir, threads=args.cpus, db_dir=hmmerdb[key], tmp_dir=tmp_dir)
+
+    if args.run_combine:
+        code = run_combine(protein_gff=f"{tmp_dir}/proteins.gff", trna_tsv=f"{tmp_dir}/trna.tsv", hmmsearch=f"{tmp_dir}/hmmsearch.csv", annotation=meta_path,output=f"{tmp_dir}/{fname}.csv",out=combine_dir)
+        if not code:
+            logger.error('summarizing failed')
+
