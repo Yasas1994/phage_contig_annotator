@@ -1,4 +1,4 @@
-name: phage_contig_annotator
+name: phage_contig_annot
 channels:
   - bioconda
   - conda-forge
