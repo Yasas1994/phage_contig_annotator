@@ -4,7 +4,6 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - shutil
   - argon2-cffi=21.3.0
   - argon2-cffi-bindings=21.2.0
   - "biopython>=1.79"
@@ -24,3 +23,4 @@ dependencies:
   - pip:
     - bcbio-gff
     - dna-features-viewer
+    - shutil
