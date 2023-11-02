@@ -23,4 +23,4 @@ dependencies:
   - pip:
     - bcbio-gff
     - dna-features-viewer
-    - shutil
+    - psutil
