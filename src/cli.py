@@ -149,12 +149,15 @@ def main():
             os.makedirs(args.path, exist_ok=True)
         if download_dbs(path=args.path):
             config.set('databases','dbroot',args.path)
+            with open(config_path, 'w') as configfile:
+                config.write(configfile)
         sys.exit()
 
     if args.db:
         db_dir = args.db
     else:
-        db_dir = f'{libpath}/databases'
+        db_dir = config['databases']['dbroot']
+        logger.info(db_dir)
 
     #search all subdirectories and determine how many dbs are avaiable
     hmmerdb = dict()
