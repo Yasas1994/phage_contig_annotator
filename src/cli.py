@@ -117,7 +117,7 @@ def main():
                         required=False,
                         type=is_valid_dir,
                         help='use a custom hmm database')
-    parser3 = subparsers.add_parser('download_db', help='run a custom pipeline')
+    parser3 = subparsers.add_parser('download_db', help='downloads the database')
     parser3.add_argument("-p","--path",
                         type=is_valid_dir,
                         required=False,
@@ -140,6 +140,7 @@ def main():
         logger.info('downloading PHROG database')
         if args.path == '':
             args.path=f'{libpath}/databases'
+            os.makedirs(args.path, exist_ok=True)
         if download_dbs(path=args.path):
             config.set('Databases','dbroot',args.path)
         sys.exit()
