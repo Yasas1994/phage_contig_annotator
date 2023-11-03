@@ -18,12 +18,17 @@ def download_dbs(path):
 
         # Download the zip file
         response = requests.get(url)
+        downloaded = 0 
         if response.status_code == 200:
+            total_size = int(response.headers.get('content-length', 0))
             tar_file_path = os.path.join(path, 'database.tar.gz')
 
             with open(tar_file_path, "wb") as file:
                 for chunk in response.iter_content(chunk_size=8192):
+                    
                     if chunk:
+                        downloaded += 8192
+                        logger.info(f'\r{downloaded/total_size : .2f}% downloaded')
                         file.write(chunk)
 
 
