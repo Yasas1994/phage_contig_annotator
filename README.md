@@ -15,7 +15,7 @@ Annotates genes on putative phage contigs with a database of hidden markov model
 ## usage
 ```
 conda activate phage_contig_annotator 
-python cli.py --input input_fasta_file_with_contigs --output output_dir
+phage_contig_annotator --cpus 10 runall --contigs --input input_fasta_file_with_contigs --output output_dir
 
 ```
 ## examples 
