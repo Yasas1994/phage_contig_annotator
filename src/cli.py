@@ -138,6 +138,7 @@ def main():
 
     if args.command == 'download_db':
         logger.info('downloading PHROG database')
+        logger.info(args.path)
         if args.path == '':
             args.path=f'{libpath}/databases'
             logger.info(args.path)
