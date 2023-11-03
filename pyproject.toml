@@ -9,9 +9,4 @@ version = "0.0.1"
 [project.scripts]
 phage_contig_annotator = "cli:main"
 
-[options.packages.find]
-where = src
 
-[options.package_data]
-config =
-    *.ini
