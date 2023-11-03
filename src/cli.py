@@ -41,6 +41,7 @@ def download_dbs(path):
             return False
     else:
         logger.info(f"Skipping database download as checkpoint found at {path}")
+        return True
 
 
 libpath=os.path.dirname(os.path.realpath(__file__))
