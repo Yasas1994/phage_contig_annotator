@@ -138,10 +138,9 @@ def main():
 
     if args.command == 'download_db':
         logger.info('downloading PHROG database')
-        logger.info(args.path)
-        if args.path == '':
+        if args.path is None:
             args.path=f'{libpath}/databases'
-            logger.info(args.path)
+
             os.makedirs(args.path, exist_ok=True)
         if download_dbs(path=args.path):
             config.set('Databases','dbroot',args.path)
