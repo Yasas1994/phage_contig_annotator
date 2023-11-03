@@ -42,7 +42,7 @@ def download_dbs(path):
             tqdm_out = TqdmToLogger(logger,level=logging.INFO)
             total_size = int(response.headers.get('content-length', 0))
             tar_file_path = os.path.join(path, 'database.tar.gz')
-            pbar = tqdm(total=100,file=tqdm_out)
+            pbar = tqdm.tqdm(total=100,file=tqdm_out)
             with open(tar_file_path, "wb") as file:
                 for chunk in response.iter_content(chunk_size=8192):
                     
