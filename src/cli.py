@@ -9,7 +9,7 @@ import configparser
 
 
 def download_dbs(path):
-    if not Path(path).joinpath('db_checkpoint').exists():
+    if not Path(path).joinpath('db_chkpt').exists():
         import requests
         import zipfile
         url =  "https://nextcloud.uni-greifswald.de/index.php/s/w2pgjQXdifsCtGA/download/databases.zip"
@@ -34,7 +34,7 @@ def download_dbs(path):
             os.remove(zip_file_path)
 
             logger.info(f"File downloaded and extracted to {path}")
-            Path(path).joinpath('db_checkpoint').touch()
+            Path(path).joinpath('db_chkpt').touch()
             return True
         else:
             logger.info(f"Failed to download the file from {url}. Status code: {response.status_code}")
