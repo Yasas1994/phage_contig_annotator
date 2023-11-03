@@ -49,7 +49,7 @@ def download_dbs(path):
                     if chunk:
                         downloaded += 8192
                         # logger.info(f'{(downloaded/total_size)*100 : .2f}% downloaded')
-                        pbar.update((downloaded/total_size)*100)
+                        pbar.update(1)
                         file.write(chunk)
 
 
