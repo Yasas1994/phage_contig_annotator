@@ -144,11 +144,13 @@ def main():
     if args.command == 'download_db':
         logger.info('downloading PHROG database')
         if args.path is None:
-            args.path=f'{libpath}/databases'
+            args.path= os.path.join(libpath, 'databases')
 
             os.makedirs(args.path, exist_ok=True)
         if download_dbs(path=args.path):
             config.set('databases','dbroot',args.path)
+            config.set('databases','hmmdb',os.path.join(args.path,'hmmdb'))
+            config.set('databases','meta',os.path.join(args.path,'meta'))
             with open(config_path, 'w') as configfile:
                 config.write(configfile)
         sys.exit()
