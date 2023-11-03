@@ -24,3 +24,4 @@ dependencies:
     - bcbio-gff
     - dna-features-viewer
     - psutil
+    - requests
