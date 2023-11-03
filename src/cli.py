@@ -7,7 +7,11 @@ from pathlib import Path
 import subprocess
 import configparser
 
-
+class NoNewlineFormatter(logging.Formatter):
+    def format(self, record):
+        msg = super(NoNewlineFormatter, self).format(record)
+        return msg.replace('\n', '')
+    
 def download_dbs(path):
     if not Path(path).joinpath('db_chkpt').exists():
         import requests
@@ -15,7 +19,11 @@ def download_dbs(path):
         url =  "https://nextcloud.uni-greifswald.de/index.php/s/ft8FAoQXscoj9eo/download/database.tar.gz"
         # Ensure the download directory exists
         os.makedirs(path, exist_ok=True)
+        handler = logging.StreamHandler()
+        handler.setFormatter(NoNewlineFormatter())
 
+        # Add the handler to the logger
+        logger.addHandler(handler)
         # Download the zip file
         response = requests.get(url)
         downloaded = 0 
@@ -28,13 +36,14 @@ def download_dbs(path):
                     
                     if chunk:
                         downloaded += 8192
-                        logger.info(f'\r{downloaded/total_size : .2f}% downloaded')
+                        logger.info(f'\r{(downloaded/total_size)*100 : .2f}% downloaded')
                         file.write(chunk)
 
 
             # Ensure the extraction directory exists
             os.makedirs(path, exist_ok=True)
-
+            handler.close()
+            logger.removeHandler(handler)
 
             # Extract the tar.gz file
             with tarfile.open(tar_file_path, "r:gz") as tar:
