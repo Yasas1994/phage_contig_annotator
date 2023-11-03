@@ -9,34 +9,38 @@ import configparser
 
 
 def download_dbs(path):
-    import requests
-    import zipfile
-    url =  "https://nextcloud.uni-greifswald.de/index.php/s/w2pgjQXdifsCtGA/download/databases.zip"
-    # Ensure the download directory exists
-    os.makedirs(path, exist_ok=True)
-
-    # Download the zip file
-    response = requests.get(url)
-    if response.status_code == 200:
-        zip_file_path = os.path.join(path, 'database.zip')
-        with open(zip_file_path, 'wb') as file:
-            file.write(response.content)
-
-        # Ensure the extraction directory exists
+    if not Path(path).joinpath('db_checkpoint').exists():
+        import requests
+        import zipfile
+        url =  "https://nextcloud.uni-greifswald.de/index.php/s/w2pgjQXdifsCtGA/download/databases.zip"
+        # Ensure the download directory exists
         os.makedirs(path, exist_ok=True)
 
-        # Extract the zip file
-        with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-            zip_ref.extractall(path)
+        # Download the zip file
+        response = requests.get(url)
+        if response.status_code == 200:
+            zip_file_path = os.path.join(path, 'database.zip')
+            with open(zip_file_path, 'wb') as file:
+                file.write(response.content)
 
-        # Clean up the downloaded zip file
-        os.remove(zip_file_path)
+            # Ensure the extraction directory exists
+            os.makedirs(path, exist_ok=True)
 
-        logger.info(f"File downloaded and extracted to {path}")
-        return True
+            # Extract the zip file
+            with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+                zip_ref.extractall(path)
+
+            # Clean up the downloaded zip file
+            os.remove(zip_file_path)
+
+            logger.info(f"File downloaded and extracted to {path}")
+            Path(path).joinpath('db_checkpoint').touch()
+            return True
+        else:
+            logger.info(f"Failed to download the file from {url}. Status code: {response.status_code}")
+            return False
     else:
-        logger.info(f"Failed to download the file from {url}. Status code: {response.status_code}")
-        return False
+        logger.info(f"Skipping database download as checkpoint found at {path}")
 
 
 libpath=os.path.dirname(os.path.realpath(__file__))
@@ -143,7 +147,7 @@ def main():
 
             os.makedirs(args.path, exist_ok=True)
         if download_dbs(path=args.path):
-            config.set('Databases','dbroot',args.path)
+            config.set('databases','dbroot',args.path)
         sys.exit()
 
     if args.db:
