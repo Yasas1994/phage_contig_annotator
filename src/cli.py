@@ -5,6 +5,39 @@ import argparse
 from utils import * #call_genes, search_hmms, search_hmms_hhsuite, parse_hmmsearch, generate_plots_and_gff, run_combine
 from pathlib import Path
 import subprocess
+import configparser
+
+
+def download_dbs(path, extract_path):
+    import requests
+    import zipfile
+    url =  "https://nextcloud.uni-greifswald.de/index.php/s/w2pgjQXdifsCtGA/download/databases.zip"
+    # Ensure the download directory exists
+    os.makedirs(path, exist_ok=True)
+
+    # Download the zip file
+    response = requests.get(url)
+    if response.status_code == 200:
+        zip_file_path = os.path.join(path, 'database.zip')
+        with open(zip_file_path, 'wb') as file:
+            file.write(response.content)
+
+        # Ensure the extraction directory exists
+        os.makedirs(extract_path, exist_ok=True)
+
+        # Extract the zip file
+        with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
+            zip_ref.extractall(path)
+
+        # Clean up the downloaded zip file
+        os.remove(zip_file_path)
+
+        logger.info(f"File downloaded and extracted to {extract_path}")
+        return True
+    else:
+        logger.info(f"Failed to download the file from {url}. Status code: {response.status_code}")
+        return False
+
 
 libpath=os.path.dirname(os.path.realpath(__file__))
 def main():
@@ -84,7 +117,11 @@ def main():
                         required=False,
                         type=is_valid_dir,
                         help='use a custom hmm database')
-
+    parser3 = subparsers.add_parser('download_db', help='run a custom pipeline')
+    parser3.add_argument("-p","--path",
+                        type=is_valid_dir,
+                        required=False,
+                        help="path to store the hmm database")
     args = parser.parse_args()
 
     if len(sys.argv) == 1:
@@ -93,7 +130,19 @@ def main():
         sys.exit(1)
 
     logger = get_logger(quiet=False)
+    config_path = os.path.join(os.path.dirname(__file__), 'config.ini')
+    config = configparser.ConfigParser()
+    config.read(config_path)
+
     logger.info('phage_contig_annotator is a simple pipeline to add PHROG annotations to phage contigs')
+
+    if args.command == 'download_db':
+        logger.info('downloading PHROG database')
+        if args.path == '':
+            args.path=f'{libpath}/databases'
+        if download_dbs(path=args.path):
+            config.set('Databases','dbroot',args.path)
+        sys.exit()
 
     if args.db:
         db_dir = args.db
@@ -105,8 +154,8 @@ def main():
     blastdb = dict()
     diamonddb = dict()
     meta_path = str
-    for path in glob.glob(db_dir+'/*'):
-        # print(path)
+    for path in glob.glob(f"{db_dir}/*"):
+
         if 'hmmerdb' in path:
             logger.info('hmmerdb found')
             db_name = path.split('/')[-1].split('_')[0]
@@ -124,7 +173,7 @@ def main():
 
         if 'meta' in path:
             logger.info('metadata file found')
-            meta_path = glob.glob(path+'/phrog_annot_v4.tsv')[0]
+            meta_path = glob.glob(f"{path}/phrog_annot_v4.tsv")[0]
 
     #tmp dirs and file names
     fname = args.input.split('/')[-1].rsplit('.',1)[0]
