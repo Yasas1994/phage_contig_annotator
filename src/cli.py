@@ -8,7 +8,7 @@ import subprocess
 import configparser
 
 
-def download_dbs(path, extract_path):
+def download_dbs(path):
     import requests
     import zipfile
     url =  "https://nextcloud.uni-greifswald.de/index.php/s/w2pgjQXdifsCtGA/download/databases.zip"
@@ -23,7 +23,7 @@ def download_dbs(path, extract_path):
             file.write(response.content)
 
         # Ensure the extraction directory exists
-        os.makedirs(extract_path, exist_ok=True)
+        os.makedirs(path, exist_ok=True)
 
         # Extract the zip file
         with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
@@ -32,7 +32,7 @@ def download_dbs(path, extract_path):
         # Clean up the downloaded zip file
         os.remove(zip_file_path)
 
-        logger.info(f"File downloaded and extracted to {extract_path}")
+        logger.info(f"File downloaded and extracted to {path}")
         return True
     else:
         logger.info(f"Failed to download the file from {url}. Status code: {response.status_code}")
