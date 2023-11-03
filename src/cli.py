@@ -1,49 +1,61 @@
 import glob
 import os
 import sys
+import io
 import argparse
 from utils import * #call_genes, search_hmms, search_hmms_hhsuite, parse_hmmsearch, generate_plots_and_gff, run_combine
 from pathlib import Path
 import subprocess
 import configparser
 
-class NoNewlineFormatter(logging.Formatter):
-    def format(self, record):
-        msg = super(NoNewlineFormatter, self).format(record)
-        return msg.replace('\n', '')
+class TqdmToLogger(io.StringIO):
+    """
+        Output stream for TQDM which will output to logger module instead of
+        the StdOut.
+    """
+    logger = None
+    level = None
+    buf = ''
+    def __init__(self,logger,level=None):
+        super(TqdmToLogger, self).__init__()
+        self.logger = logger
+        self.level = level or logging.INFO
+    def write(self,buf):
+        self.buf = buf.strip('\r\n\t ')
+    def flush(self):
+        self.logger.log(self.level, self.buf)
     
 def download_dbs(path):
     if not Path(path).joinpath('db_chkpt').exists():
         import requests
         import tarfile
+        import tqdm
+
         url =  "https://nextcloud.uni-greifswald.de/index.php/s/ft8FAoQXscoj9eo/download/database.tar.gz"
         # Ensure the download directory exists
         os.makedirs(path, exist_ok=True)
-        handler = logging.StreamHandler()
-        handler.setFormatter(NoNewlineFormatter())
-
-        # Add the handler to the logger
-        logger.addHandler(handler)
         # Download the zip file
         response = requests.get(url)
         downloaded = 0 
         if response.status_code == 200:
+            
+            tqdm_out = TqdmToLogger(logger,level=logging.INFO)
             total_size = int(response.headers.get('content-length', 0))
             tar_file_path = os.path.join(path, 'database.tar.gz')
-
+            pbar = tqdm(total=100,file=tqdm_out)
             with open(tar_file_path, "wb") as file:
                 for chunk in response.iter_content(chunk_size=8192):
                     
                     if chunk:
                         downloaded += 8192
-                        logger.info(f'{(downloaded/total_size)*100 : .2f}% downloaded')
+                        # logger.info(f'{(downloaded/total_size)*100 : .2f}% downloaded')
+                        pbar.update((downloaded/total_size)*100)
                         file.write(chunk)
 
 
             # Ensure the extraction directory exists
             os.makedirs(path, exist_ok=True)
-            handler.close()
-            logger.removeHandler(handler)
+
 
             # Extract the tar.gz file
             with tarfile.open(tar_file_path, "r:gz") as tar:

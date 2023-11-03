@@ -25,3 +25,4 @@ dependencies:
     - dna-features-viewer
     - psutil
     - requests
+    - tqdm
