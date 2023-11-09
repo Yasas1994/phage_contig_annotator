@@ -6,12 +6,9 @@ channels:
 dependencies:
   - argon2-cffi=21.3.0
   - argon2-cffi-bindings=21.2.0
-  - "biopython>=1.79"
   - "diamond>=2"
   - "hhsuite>=3.3.0"
   - "hmmer>=3.3.2"
-  - "numpy>=1.23"
-  - "pandas>=1.5"
   - pip
   - prodigal
   - prodigal-gv
@@ -26,3 +23,6 @@ dependencies:
     - psutil
     - requests
     - tqdm
+    - biopython
+    - numpy
+    - pandas
