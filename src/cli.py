@@ -47,9 +47,9 @@ def download_dbs(path):
                 for chunk in response.iter_content(chunk_size=8192):
                     
                     if chunk:
-                        downloaded += sys.getsizeof(chunk)
+                        # downloaded += 
                         # logger.info(f'{(downloaded/total_size)*100 : .2f}% downloaded')
-                        pbar.update(downloaded)
+                        pbar.update(8192/1024)
                         file.write(chunk)
 
 
