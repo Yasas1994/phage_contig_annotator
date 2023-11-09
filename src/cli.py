@@ -44,12 +44,12 @@ def download_dbs(path):
             tar_file_path = os.path.join(path, 'database.tar.gz')
             pbar = tqdm.tqdm(total=(total_size/(1024*1024)),unit='MB',)
             with open(tar_file_path, "wb") as file:
-                for chunk in response.iter_content(chunk_size=8192):
+                for chunk in response.iter_content(chunk_size=1024):
                     
                     if chunk:
                         # downloaded += 
                         # logger.info(f'{(downloaded/total_size)*100 : .2f}% downloaded')
-                        pbar.update(8192/1024)
+                        pbar.update(1024/1024)
                         file.write(chunk)
 
 
