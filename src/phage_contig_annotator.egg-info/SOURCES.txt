@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+src/__init__.py
+src/cli.py
+src/utils.py
+src/phage_contig_annotator.egg-info/PKG-INFO
+src/phage_contig_annotator.egg-info/SOURCES.txt
+src/phage_contig_annotator.egg-info/dependency_links.txt
+src/phage_contig_annotator.egg-info/entry_points.txt
+src/phage_contig_annotator.egg-info/top_level.txt

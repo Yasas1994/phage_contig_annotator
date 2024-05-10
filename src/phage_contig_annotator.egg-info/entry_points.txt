@@ -1,0 +1,2 @@
+[console_scripts]
+phage_contig_annotator = cli:main

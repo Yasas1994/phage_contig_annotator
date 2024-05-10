@@ -651,6 +651,39 @@ def parse_trna(path, **kwargs):
                 except Exception as e:
                     print(f"{e}/;skipping erroneous line")
 
+#parse tRNAscan-SE GFF
+def parse_trna_gff(path, **kwargs):
+    with open(path) as f:
+        names = [
+            "qname",
+            "begin",
+            "end",
+            "score",
+            "strand",
+            "trna_no",
+            "trna_type",
+            "anticodon",
+            
+        ]
+        indices = [0,3,4,5,6]
+        formats = [str, int, int, float, str, int, str, str]
+        for line in f:
+            if not (line.startswith("#")) and ("exon" not in line):
+                values = line.split()
+                v = [values[i] for i in indices]
+                meta = values[-1].split(";")
+                for i in meta:
+                    if i.startswith("ID"):
+                        v.append(int(i.split("trna")[-1]))
+                    elif i.startswith("isotype"):
+                        v.append(i.split("=")[-1])
+                    elif i.startswith("anticodon"):
+                        v.append(i.split("=")[-1])
+                try:
+                    yield dict([(names[i], formats[i](v[i])) for i in range(8)])
+                except Exception as e:
+                    print(f"{e}; skipping erroneous line")
+
 def get_cordinates(x, **kwargs):
     if x['begin'] > x['end']:
         return pd.Series([x["qname"],x["trna_no"],x['end'],x['begin'],-1,x["trna_type"],x["score"]], index=["contig","trna_no","begin","end","strand","trna_type","score"])
@@ -666,8 +699,8 @@ def create_feature(x, **kwargs):
         "label" : x["trna_type"]+"_tRNA",
         "ID": "trna_"+str(x["trna_no"]),
     }
-
-    return (SeqFeature(FeatureLocation(x["begin"], x["end"]), type="tRNA",id=str(x["trna_no"]), strand=x["strand"], qualifiers=qualifiers))
+    #print(x)
+    return (SeqFeature(FeatureLocation(x["begin"], x["end"], strand=x["strand"]), type="tRNA", id=str(x["trna_no"]),  qualifiers=qualifiers))
 
 
 def generate_plots_and_gff(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir, gff_dir, **kwargs):    
@@ -682,20 +715,21 @@ def generate_plots_and_gff(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir, gff_dir, 
         #process hmmsearch results
         logger.info('processing hmm results')
         search_results=pd.DataFrame(parse_hmmsearch(hmmsearch_dir))
-        trna=pd.DataFrame(parse_trna(trna_dir))
+        trna=pd.DataFrame(parse_trna_gff(trna_dir))
+        #print(trna)
         if search_results.empty:
             sys.stderr.write('Exiting because hmmsearch returned zero matches!')
             sys.exit( )
         
         if not trna.empty:
-            trna=trna.apply(lambda x : get_cordinates(x) , axis=1).sort_values(by=["contig","begin"])
+            trna = trna.apply(lambda x : get_cordinates(x) , axis=1).sort_values(by=["contig","begin"])
         else:
             trna = None
 
-        phrogs_anno=pd.read_table(meta_dir)
-        phrogs_anno=phrogs_anno.fillna('unknown function')
-        search_results=pd.DataFrame(parse_hmmsearch(hmmsearch_dir))
-        phrogs_anno['phrog']=phrogs_anno['phrog'].apply(lambda x : f'phrog_{x}')
+        phrogs_anno = pd.read_table(meta_dir)
+        phrogs_anno = phrogs_anno.fillna('unknown function')
+        search_results = pd.DataFrame(parse_hmmsearch(hmmsearch_dir))
+        phrogs_anno['phrog'] = phrogs_anno['phrog'].apply(lambda x : f'phrog_{x}')
         results_with_annotate = search_results.merge(phrogs_anno, how='inner', left_on='tname', right_on='phrog')
         results_with_annotate['position'] = results_with_annotate['qname'].apply(lambda x: int(x.split('_')[-1]))
         results_with_annotate['contig'] = results_with_annotate['qname'].apply(lambda x: x.rsplit('_',1)[0])
@@ -707,7 +741,6 @@ def generate_plots_and_gff(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir, gff_dir, 
         with open(gff_out_dir, "w") as out_handle:
         
             for i in GFF.parse(gff_dir):
-                
                 
                 tmp = results_filtered.query(f"contig == '{i.id}'")
 
@@ -734,10 +767,10 @@ def generate_plots_and_gff(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir, gff_dir, 
                         i.features.extend(tmp_trna["feature"].to_list())
                 #write updated to gff record to a file
                 graphic_record = BiopythonTranslator().translate_record(i) 
-                GFF.write([i], out_handle) #write gff records to the out file
+                GFF.write([i], out_handle) # write gff records to the out file
                 for feat in graphic_record.features: #turns off the labels of cds' without annotations
                     if feat.label == "unknown function":
-                        feat.label =None
+                        feat.label = None
                 fig, ax1 = plt.subplots(1, 1, figsize=(15, 4))
                 fig.tight_layout(pad=2.5) 
                 ax, _ = graphic_record.plot(ax=ax1, strand_in_label_threshold=7,annotate_inline=False,figure_height=3 )
@@ -750,4 +783,3 @@ def generate_plots_and_gff(tmp_dir, hmmsearch_dir, trna_dir ,meta_dir, gff_dir, 
         Path(checkpoint_file).touch()
     else:
         logger.info('plotting checkpoint found')
-

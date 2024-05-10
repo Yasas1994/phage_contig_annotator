@@ -263,7 +263,7 @@ def main():
                         threads=args.cpus,
                         db_dir=hmmerdb[key], 
                         tmp_dir=tmp_dir)
-        generate_plots_and_gff( tmp_dir=tmp_dir,trna_dir=f'{tmp_dir}/trna.tsv',
+        generate_plots_and_gff( tmp_dir=tmp_dir,trna_dir=f'{tmp_dir}/trna.gff',
                                 hmmsearch_dir=f'{tmp_dir}/hmmsearch.txt',
                                 meta_dir=meta_path,
                                 gff_dir=gff_path,) 
@@ -284,7 +284,7 @@ def main():
 
         if args.run_combine:
             code = run_combine( protein_gff=os.path.join(tmp_dir,'proteins.gff'), 
-                                trna_tsv=os.path.join(tmp_dir,'trna.tsv'),
+                                trna_tsv=os.path.join(tmp_dir,'trna.gff'),
                                 hmmsearch=os.path.join(tmp_dir,'hmmsearch.csv'),
                                 annotation=meta_path,output=os.path.join(tmp_dir,f"{fname}.csv"),
                                 out=combine_dir )
