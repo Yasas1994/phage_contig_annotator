@@ -13,7 +13,23 @@ The pipeline is managed by [Snakemake](https://snakemake.github.io/), uses [pyro
 - Python >= 3.11
 - Conda (recommended for installing tRNAscan-SE)
 
-## Installation
+## Quick install (macOS/Linux)
+
+If you already have [Conda](https://docs.conda.io/) installed, run:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Yasas1994/phage_contig_annotator/main/install.sh)
+```
+
+Or, after cloning the repository:
+
+```bash
+git clone https://github.com/Yasas1994/phage_contig_annotator.git
+cd phage_contig_annotator
+bash install.sh
+```
+
+## Manual installation
 
 1) Clone the repository:
    ```bash
