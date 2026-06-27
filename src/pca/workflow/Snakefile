@@ -1,0 +1,151 @@
+"""Snakemake workflow for phage contig annotation.
+
+The workflow expects ``config.yaml`` in the working directory with at least:
+
+- ``input``: path to input FASTA (contigs or proteins)
+- ``input_type``: ``"contigs"`` or ``"proteins"``
+- ``output_dir``: top-level output directory
+- ``db_dir``: directory containing HMM database splits
+- ``meta_path``: path to PHROG metadata TSV
+- ``run_trna``: whether to run tRNAscan-SE (default: true)
+"""
+
+from pathlib import Path
+
+input_path = Path(config["input"])
+output_dir = Path(config["output_dir"])
+input_type = config.get("input_type", "contigs")
+run_trna = config.get("run_trna", True)
+db_dir = Path(config["db_dir"])
+meta_path = Path(config["meta_path"])
+
+proteins_faa = output_dir / "proteins.faa"
+proteins_gff = output_dir / "proteins.gff"
+trna_tsv = output_dir / "trna.tsv"
+trna_gff = output_dir / "trna.gff"
+hmmsearch_txt = output_dir / "hmmsearch.txt"
+hmmsearch_csv = output_dir / "hmmsearch.csv"
+annotations_gff = output_dir / "annotations.gff"
+plots_dir = output_dir / "plots"
+
+
+rule all:
+    """Final outputs: annotated GFF and per-contig plots."""
+    input:
+        gff=annotations_gff,
+        plots=plots_dir,
+
+
+if input_type == "contigs":
+
+    rule gene_calling:
+        """Predict genes with pyrodigal-gv."""
+        input:
+            fna=input_path,
+        output:
+            faa=proteins_faa,
+            gff=proteins_gff,
+        threads: workflow.cores
+        run:
+            from pca.pipeline import call_genes_pyrodigal
+
+            call_genes_pyrodigal(
+                input.fna,
+                output.faa,
+                output.gff,
+                threads=threads,
+            )
+
+else:
+
+    rule stage_proteins:
+        """Copy a user-supplied protein FASTA into the output directory."""
+        input:
+            faa=input_path,
+        output:
+            faa=proteins_faa,
+        run:
+            import shutil
+
+            shutil.copy(input.faa, output.faa)
+
+
+if run_trna:
+
+    rule trna_calling:
+        """Predict tRNAs with tRNAscan-SE."""
+        input:
+            fna=input_path,
+        output:
+            tsv=trna_tsv,
+            gff=trna_gff,
+        threads: workflow.cores
+        run:
+            from pca.externals import run_trnascan
+
+            run_trnascan(
+                out=str(output_dir / "trna"),
+                in_=str(input.fna),
+                threads=threads,
+            )
+
+else:
+
+    rule empty_trna:
+        """Create an empty tRNA GFF when tRNA scanning is disabled."""
+        output:
+            tsv=trna_tsv,
+            gff=trna_gff,
+        run:
+            from pca.io import get_compressed_file_handle
+
+            with open(output.tsv, "w") as fh:
+                fh.write("")
+            with open(output.gff, "w") as fh:
+                fh.write("##gff-version 3\n")
+
+
+rule hmmsearch:
+    """Search predicted proteins against HMM databases with pyhmmer."""
+    input:
+        faa=proteins_faa,
+    output:
+        txt=hmmsearch_txt,
+        csv=hmmsearch_csv,
+    threads: workflow.cores
+    params:
+        db_dir=db_dir,
+    run:
+        from pca.pipeline import search_hmms_pyhmmer
+
+        search_hmms_pyhmmer(
+            input.faa,
+            params.db_dir,
+            output.txt,
+            output.csv,
+            threads=threads,
+        )
+
+
+rule annotate:
+    """Generate annotated GFF and per-contig PNG maps."""
+    input:
+        hmmsearch=hmmsearch_txt,
+        trna_gff=trna_gff,
+        proteins_gff=proteins_gff if input_type == "contigs" else [],
+        meta=meta_path,
+    output:
+        gff=annotations_gff,
+        plots=directory(plots_dir),
+    run:
+        from pca.annotations import generate_plots_and_gff
+
+        gff_input = input.proteins_gff if input_type == "contigs" else str(proteins_gff)
+
+        generate_plots_and_gff(
+            tmp_dir=output_dir,
+            hmmsearch_dir=input.hmmsearch,
+            trna_dir=input.trna_gff,
+            meta_dir=input.meta,
+            gff_dir=gff_input,
+        )

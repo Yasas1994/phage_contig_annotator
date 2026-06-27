@@ -4,15 +4,8 @@ channels:
   - conda-forge
   - defaults
 dependencies:
-  - argon2-cffi=21.3.0
-  - argon2-cffi-bindings=21.2.0
-  - "diamond>=2"
-  - "hhsuite>=3.3.0"
-  - "hmmer>=3.3.2"
   - pip
-  - prodigal
-  - prodigal-gv
-  - "python>=3.9,<3.11"
+  - "python>=3.11"
   - "scipy>=1.9.3"
   - "seaborn>=0.12"
   - "trnascan-se=2.0.9"
@@ -26,3 +19,8 @@ dependencies:
     - biopython
     - numpy
     - pandas
+    - matplotlib
+    - "snakemake>=9.0"
+    - "click>=8.0"
+    - "pyrodigal-gv>=0.3"
+    - "pyhmmer>=0.12"

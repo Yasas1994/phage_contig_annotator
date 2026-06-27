@@ -1,17 +1,46 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "phage_contig_annotator"
 version = "0.0.1"
+requires-python = ">=3.11"
+dependencies = [
+    "biopython",
+    "numpy",
+    "pandas",
+    "scipy",
+    "seaborn",
+    "matplotlib",
+    "dna-features-viewer",
+    "bcbio-gff",
+    "psutil",
+    "requests",
+    "tqdm",
+    "snakemake>=9.0",
+    "click>=8.0",
+    "pyrodigal-gv>=0.3",
+    "pyhmmer>=0.12",
+]
+
+[project.scripts]
+phage_contig_annotator = "pca.cli:cli_entry"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"pca.data" = ["*.ini"]
+pca = ["data/*.ini", "workflow/*"]
 
-[project.scripts]
-phage_contig_annotator = "pca:cli.main"
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]

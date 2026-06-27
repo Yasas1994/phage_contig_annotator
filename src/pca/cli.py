@@ -1,348 +1,283 @@
-import glob
-import os
-import sys
-import io
-import argparse
-from pathlib import Path
+"""Command-line interface for the phage contig annotator pipeline."""
+
+from __future__ import annotations
+
 import configparser
-import logging
-import requests
+import os
+import subprocess
+import sys
 import tarfile
+from pathlib import Path
+from typing import Sequence
+
+import click
+import requests
 import tqdm
-from importlib.resources import files
-from pca.utils import (get_logger,
-                       is_valid_file_path,
-                       is_valid_dir,
-                       dbname,
-                       call_genes,
-                       search_hmms,
-                       search_hmms_hhsuite,
-                       parse_hmmsearch,
-                       generate_plots_and_gff,
-                       run_combine)
 
-# To-do
-# add support for custom databases [.hmms & metadata]
+from pca import validation
+from pca.logutils import get_logger
 
 
-class TqdmToLogger(io.StringIO):
-    """
-        Output stream for TQDM which will output to logger module instead of
-        the StdOut.
-    """
-    logger = None
-    level = None
-    buf = ''
-
-    def __init__(self, logger, level=None):
-        super(TqdmToLogger, self).__init__()
-        self.logger = logger
-        self.level = level or logging.INFO
-
-    def write(self, buf):
-        self.buf = buf.strip('\r\n\t ')
-
-    def flush(self):
-        self.logger.log(self.level, self.buf)
+def _package_dir() -> Path:
+    """Return the directory containing this package."""
+    return Path(__file__).parent.resolve()
 
 
-def download_dbs(path: str, logger: str, force: bool = False) -> bool:
-    if (not Path(path).joinpath('db_chkpt').exists()) or force:
-        url = "https://nextcloud.uni-greifswald.de/index.php/s/ft8FAoQXscoj9eo/download/database.tar.gz"
-        logger.info(url)
-        # Ensure the download directory exists
-        os.makedirs(path, exist_ok=True)
-        # 1KB = 1024 bytes
-        tar_file_path = os.path.join(path, 'database.tar.gz')
-        with requests.get(url, stream=True) as response:
-            response.raise_for_status()
-
-            pbar = tqdm.tqdm(unit='B', unit_scale=True, unit_divisor=1000)
-
-            with open(tar_file_path, "wb") as file:
-                for chunk in response.iter_content(chunk_size=1024):
-                    if chunk:
-                        pbar.update(1024)
-                        file.write(chunk)
-
-            # Ensure the extraction directory exists
-            os.makedirs(path, exist_ok=True)
-
-            # Extract the tar.gz file
-            with tarfile.open(tar_file_path, "r:gz") as tar:
-                tar.extractall(path=path)
-                # Clean up the downloaded zip file
-            os.remove(tar_file_path)
-
-            logger.info(f"database downloaded and extracted to {path}")
-            Path(path).joinpath('db_chkpt').touch()
-            return True
-
-    else:
-        logger.info(f"Skipping database download as checkpoint found at {path}")
-        return True
-
-
-def main():
-
-    libpath = os.path.dirname(os.path.realpath(__file__))
-
-    parser = argparse.ArgumentParser(description='A pipeline to annotate genes in phage contigs with phrogs and VOGs\n')
-
-    subparsers = parser.add_subparsers(help='mode', dest='command')
-    parser1 = subparsers.add_parser('runall', help='run the entire pipeline')
-
-    parser1.add_argument("-i",
-                         "--input",
-                         type=is_valid_file_path,
-                         required=True,
-                         help="path to input fasta file with putative ")
-    parser1.add_argument("--contigs",
-                         required=False,
-                         action='store_true',
-                         default=False,
-                         help='predict proteins')
-    parser1.add_argument("-o",
-                         "--output",
-                         type=is_valid_dir,
-                         required=True,
-                         help='path to output dir')
-    parser1.add_argument("-db",
-                         required=False,
-                         type=is_valid_dir,
-                         help='use a custom hmm database')
-    parser1.add_argument("--cpus",
-                         type=int,
-                         required=False,
-                         default=8,
-                         help='set the number of cpus to use')
-
-    parser1.add_argument("--type",
-                         required=False,
-                         default='contigs',
-                         help='define the input type default:contigs, options:[contigs, proteins]')
-    # run custom
-    parser2 = subparsers.add_parser('custom', help='run a custom pipeline')
-    parser2.add_argument('--run_prodigal',
-                         required=False,
-                         action='store_true',
-                         default=False,
-                         help='runs prodigal')
-    parser2.add_argument('--run_hmmer',
-                         required=False,
-                         action='store_true',
-                         default=False,
-                         help='runs hmmer, input should contain valid protein sequences')
-    parser2.add_argument('--run_combine',
-                         required=False,
-                         action='store_true',
-                         default=False,
-                         help='runs combine.py, merges all results to a single file')
-    parser2.add_argument('--run_blast',
-                         required=False,
-                         action='store_true',
-                         default=False,
-                         help='runs blastp, input should contain valid protein sequences')
-    parser2.add_argument('--run_diamond',
-                         required=False,
-                         action='store_true',
-                         default=False,
-                         help='runs diamond blastp,input should contain valid protein sequences')
-    parser2.add_argument('--run_trnascan',
-                         required=False,
-                         action='store_true',
-                         default=False,
-                         help='runs trnascan, input should contain valid protein sequences')
-    parser2.add_argument("-i",
-                         "--input",
-                         type=is_valid_file_path,
-                         required=True,
-                         help="path to input fasta file with putative ")
-    parser2.add_argument("-o",
-                         "--output",
-                         type=is_valid_dir,
-                         required=True,
-                         help='path to output dir')
-    parser2.add_argument("-db",
-                         required=False,
-                         type=is_valid_dir,
-                         help='use a custom hmm database')
-    parser2.add_argument("--cpus",
-                         type=int,
-                         required=False,
-                         default=8,
-                         help='set the number of cpus to use')
-
-    parser2.add_argument("--type",
-                         required=False,
-                         default='contigs',
-                         help='define the input type default:contigs, options:[contigs, proteins]')
-
-    parser3 = subparsers.add_parser('download_db', help='downloads the database')
-    parser3.add_argument("-p",
-                         "--path",
-                         type=is_valid_dir,
-                         required=False,
-                         help="path to store the hmm database")
-    parser3.add_argument("-f",
-                         required=False,
-                         help="override the checkpoint and re-download the database")
-    args = parser.parse_args()
-
-    if len(sys.argv) == 1:
-
-        parser.print_help()
-        sys.exit(1)
-
-    logger = get_logger(quiet=False)
-
-    config_path = files('pca.data').joinpath('config.ini')
+def _load_config() -> configparser.ConfigParser:
+    """Load the bundled ``config.ini``."""
+    config_path = _package_dir() / "data" / "config.ini"
     config = configparser.ConfigParser()
     config.read(config_path)
+    return config
 
-    logger.info('phage_contig_annotator is a simple pipeline to add PHROG annotations to phage contigs')
 
-    if args.command == 'download_db':
-        logger.info('downloading PHROG database')
-        if args.path is None:
-            args.path = os.path.join(libpath, 'databases')
-            os.makedirs(args.path, exist_ok=True)
+def _write_config(config: configparser.ConfigParser) -> None:
+    """Persist updates to the bundled ``config.ini``."""
+    config_path = _package_dir() / "data" / "config.ini"
+    with open(config_path, "w") as configfile:
+        config.write(configfile)
 
-        if download_dbs(path=args.path, logger=logger):
-            config.set('databases',
-                       'dbroot',
-                       os.path.realpath(args.path))
-            config.set('databases',
-                       'hmmdb',
-                       os.path.join(os.path.realpath(args.path), 'hmmdb'))
-            config.set('databases',
-                       'meta',
-                       os.path.join(os.path.realpath(args.path), 'meta'))
-            with open(config_path, 'w') as configfile:
-                config.write(configfile)
-        sys.exit(0)
 
-    if args.db:
-        db_dir = args.db
-    else:
-        db_dir = config['databases']['dbroot']
-        logger.info(db_dir)
+def _discover_databases(db_dir: str) -> tuple[dict[str, str], str | None]:
+    """Return discovered HMM databases and the PHROG metadata path."""
+    hmmerdb: dict[str, str] = {}
+    meta_path: str | None = None
 
-    # search all subdirectories and determine how many dbs are avaiable
-    hmmerdb = dict()
-    blastdb = dict()
-    diamonddb = dict()
-    hmmerdb_meta_path = str
-    blastdb_meta_path = str
-    diamonddb_meta_path = str
+    for path in Path(db_dir).glob("*"):
+        path_str = str(path)
+        if "hmmerdb" in path_str:
+            db_name = path.name.split("_")[0]
+            hmmerdb[db_name] = path_str
+        if "meta" in path_str:
+            candidates = list(path.glob("phrog_annot_v4.tsv"))
+            if candidates:
+                meta_path = str(candidates[0])
 
-    for path in glob.glob(os.path.join(db_dir, "*")):
+    return hmmerdb, meta_path
 
-        if 'hmmerdb' in path:
-            logger.info('hmmerdb found')
-            db_name = os.path.basename(path).split('_')[0]
-            hmmerdb[db_name] = path
 
-        if 'blastdb' in path:
-            logger.info('blastdb found')
-            db_name = os.path.basename(path).split('_')[0]
-            blastdb[db_name] = path
+def _snakefile_path() -> Path:
+    """Return the path to the bundled Snakemake workflow."""
+    return _package_dir() / "workflow" / "Snakefile"
 
-        if 'diamond' in path:
-            logger.info('diamond_db found')
-            db_name = os.path.basename(path).split('_')[0]
-            diamonddb[db_name] = path
 
-        if 'meta' in path:
-            logger.info('metadata file found')
-            hmmerdb_meta_path = glob.glob(os.path.join(path, "*"))[0]
+def download_dbs(path: str) -> bool:
+    """Download and extract the PHROG annotation database."""
+    checkpoint = Path(path) / "db_chkpt"
+    if checkpoint.exists():
+        click.echo(f"Skipping database download as checkpoint found at {path}")
+        return True
 
-    # tmp dirs and file names
-    fname = os.path.basename(args.input).rsplit('.', 1)[0]
-    tmp_dir = os.path.join(os.path.abspath(args.output), fname)
+    url = (
+        "https://nextcloud.uni-greifswald.de/index.php/s/"
+        "ft8FAoQXscoj9eo/download/database.tar.gz"
+    )
+    os.makedirs(path, exist_ok=True)
 
-    fna_dir = os.path.join(tmp_dir, 'fna')
-    # this can be done inside the call genes funciton
-    prot_dir = os.path.join(tmp_dir, 'proteins')
-    plots_dir = os.path.join(tmp_dir, 'plots')
-    combine_dir = os.path.join(tmp_dir, 'combined')
+    response = requests.get(url, stream=True, timeout=300)
+    if response.status_code != 200:
+        click.echo(
+            f"Failed to download the database from {url}. "
+            f"Status code: {response.status_code}",
+            err=True,
+        )
+        return False
 
-    hmmsearch_dirs = {}
-    for key in hmmerdb.keys():
-        hmmsearch_dirs[key] = os.path.join(tmp_dir, f"hmmsearch_{key}")
+    tar_file_path = Path(path) / "database.tar.gz"
+    total_size = int(response.headers.get("content-length", 0))
+    pbar = tqdm.tqdm(total=total_size / (1024 * 1024), unit="MB")
+    with open(tar_file_path, "wb") as file:
+        for chunk in response.iter_content(chunk_size=1024):
+            if chunk:
+                pbar.update(len(chunk) / (1024 * 1024))
+                file.write(chunk)
+    pbar.close()
 
-    # creating dirs
-    Path(tmp_dir).mkdir(parents=True, exist_ok=True)
-    if args.type != 'contigs':
-        # create a symlobic link to the input file in tmp dir
-        try:
-            os.symlink(os.path.abspath(args.input),
-                       os.path.join(tmp_dir, 'proteins.faa'))
-        except Exception as e:
-            logger.warning(e)
-    else:
-        Path(fna_dir).mkdir(parents=True, exist_ok=True)
-        Path(prot_dir).mkdir(parents=True, exist_ok=True)
+    with tarfile.open(tar_file_path, "r:gz") as tar:
+        for member in tar.getmembers():
+            member.name = os.path.basename(member.name) or member.name
+        tar.extractall(path=path)
 
-    for i in hmmsearch_dirs.values():
-        Path(i).mkdir(parents=True, exist_ok=True)
+    tar_file_path.unlink()
+    click.echo(f"Database downloaded and extracted to {path}")
+    checkpoint.touch()
+    return True
 
-    Path(plots_dir).mkdir(parents=True, exist_ok=True)
-    Path(combine_dir).mkdir(parents=True, exist_ok=True)
 
-    if args.command == 'runall':
-        if args.type == 'contigs':
+@click.group(invoke_without_command=True)
+@click.option("--quiet", is_flag=True, help="Suppress informational logging.")
+@click.pass_context
+def main(ctx: click.Context, quiet: bool) -> None:
+    """Annotate genes in phage contigs with PHROG/VOG HMMs."""
+    ctx.ensure_object(dict)
+    ctx.obj["quiet"] = quiet
+    get_logger(quiet=quiet)
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+        ctx.exit(0)
 
-            call_genes(os.path.realpath(args.input),
-                       threads=args.cpus,
-                       tmp_dir=tmp_dir,
-                       trna=True)
 
-        for key in hmmerdb.keys():  # run hmmsearch for all available databases
+@main.command()
+@click.option(
+    "-i",
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
+    help="Path to input FASTA file with contigs or proteins.",
+)
+@click.option(
+    "-o",
+    "--output",
+    "output_dir",
+    required=True,
+    type=click.Path(file_okay=False, writable=True, path_type=Path),
+    help="Path to output directory.",
+)
+@click.option(
+    "--type",
+    "input_type",
+    default="contigs",
+    type=click.Choice(["contigs", "proteins"], case_sensitive=False),
+    help="Input type (default: contigs).",
+)
+@click.option(
+    "--skip-trna",
+    is_flag=True,
+    help="Skip tRNAscan-SE gene prediction.",
+)
+@click.option(
+    "-db",
+    "--db",
+    "db_dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False, readable=True, path_type=Path),
+    help="Use a custom HMM database directory.",
+)
+@click.option(
+    "--cpus",
+    default=8,
+    show_default=True,
+    type=int,
+    help="Number of CPUs to use.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show Snakemake execution plan without running.",
+)
+@click.pass_context
+def runall(
+    ctx: click.Context,
+    input_path: Path,
+    output_dir: Path,
+    input_type: str,
+    skip_trna: bool,
+    db_dir: Path | None,
+    cpus: int,
+    dry_run: bool,
+) -> None:
+    """Run the full annotation pipeline."""
+    logger = get_logger(quiet=ctx.obj["quiet"])
 
-            search_hmms(hmmout_dir=hmmsearch_dirs[key],
-                        proteins_dir=prot_dir,
-                        threads=args.cpus,
-                        db_dir=hmmerdb[key],
-                        tmp_dir=tmp_dir)
+    config = _load_config()
+    db_dir = db_dir or Path(config["databases"]["dbroot"])
+    if not db_dir.is_dir():
+        raise click.UsageError(f"Database directory does not exist: {db_dir}")
 
-        generate_plots_and_gff(tmp_dir=tmp_dir,
-                               trna_dir=os.path.join(tmp_dir, 'trna.gff'),
-                               hmmsearch_dir=os.path.join(tmp_dir,
-                                                          'hmmsearch.txt'),
-                               meta_dir=hmmerdb_meta_path,
-                               gff_dir=os.path.join(tmp_dir,
-                                                    'proteins.gff'))
+    hmmerdb, meta_path = _discover_databases(str(db_dir))
+    if not hmmerdb:
+        raise click.UsageError(f"No HMM databases found in {db_dir}")
+    if meta_path is None:
+        raise click.UsageError(f"PHROG metadata not found in {db_dir}")
 
-    elif args.command == 'custom':
-        if args.run_prodigal:
-            call_genes(args.input,
-                       threads=args.cpus,
-                       tmp_dir=tmp_dir,
-                       trna=args.run_trnascan)
-        if args.run_hmmer:
-            for key in hmmerdb.keys():
-                search_hmms(hmmout_dir=hmmsearch_dirs[key],
-                            proteins_dir=prot_dir,
-                            threads=args.cpus,
-                            db_dir=hmmerdb[key],
-                            tmp_dir=tmp_dir)
+    if not skip_trna:
+        validation.check_executables(["tRNAscan-SE"])
 
-        if args.run_combine:
-            code = run_combine(protein_gff=os.path.join(tmp_dir,
-                                                        'proteins.gff'),
-                               trna_tsv=os.path.join(tmp_dir,
-                                                     'trna.gff'),
-                               hmmsearch=os.path.join(tmp_dir,
-                                                      'hmmsearch.csv'),
-                               annotation=hmmerdb_meta_path,
-                               output=os.path.join(tmp_dir,
-                                                   f"{fname}.csv"),
-                               out=combine_dir)
-            if not code:
-                logger.error('summarizing failed')
-                sys.exit(1)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    workflow_config = {
+        "input": str(input_path.resolve()),
+        "input_type": input_type,
+        "output_dir": str(output_dir.resolve()),
+        "db_dir": str(Path(next(iter(hmmerdb.values()))).resolve()),
+        "meta_path": str(Path(meta_path).resolve()),
+        "run_trna": not skip_trna,
+    }
+
+    config_path = output_dir / "config.yaml"
+    _write_yaml_config(config_path, workflow_config)
+    logger.info("wrote workflow config to %s", config_path)
+
+    snakefile = _snakefile_path()
+    cmd = [
+        "snakemake",
+        "--snakefile", str(snakefile),
+        "--directory", str(output_dir),
+        "--cores", str(cpus),
+        "--configfile", str(config_path),
+    ]
+    if dry_run:
+        cmd.append("--dry-run")
+
+    env = os.environ.copy()
+    src_dir = str(_package_dir().parent)
+    existing_pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = f"{src_dir}{os.pathsep}{existing_pythonpath}" if existing_pythonpath else src_dir
+
+    cmd.extend(["--envvars", "PYTHONPATH"])
+
+    logger.info("running snakemake: %s", " ".join(cmd))
+    result = subprocess.run(cmd, env=env)
+    sys.exit(result.returncode)
+
+
+@main.command()
+@click.option(
+    "-p",
+    "--path",
+    "path",
+    default=None,
+    type=click.Path(file_okay=False, writable=True, path_type=Path),
+    help="Path to store the database.",
+)
+@click.pass_context
+def download_db(ctx: click.Context, path: Path | None) -> None:
+    """Download the annotation database and update local config."""
+    path = path or _package_dir() / "databases"
+    path.mkdir(parents=True, exist_ok=True)
+
+    if not download_dbs(path=str(path)):
+        raise click.ClickException("Database download failed.")
+
+    config = _load_config()
+    config.set("databases", "dbroot", str(path))
+    config.set("databases", "hmmdb", str(path / "hmmdb"))
+    config.set("databases", "meta", str(path / "meta"))
+    _write_config(config)
+    click.echo(f"Updated config.ini with database path: {path}")
+
+
+def _write_yaml_config(path: Path, config: dict[str, object]) -> None:
+    """Write a workflow config YAML file."""
+    import yaml
+
+    with open(path, "w") as fh:
+        yaml.safe_dump(config, fh, default_flow_style=False)
+
+
+def cli_entry(argv: Sequence[str] | None = None) -> int:
+    """Entry point for the console script."""
+    try:
+        main.main(args=argv, standalone_mode=False)
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
+    except Exception as exc:
+        click.echo(f"Error: {exc}", err=True)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(cli_entry())
