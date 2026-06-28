@@ -773,7 +773,8 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const trackHeight = 55;
   const trackGap = 35;
   const featureHeight = 22;
-  const laneStep = 16;
+  const laneGap = 6;
+  const laneStep = featureHeight + laneGap;
 
   // Stack overlapping features on the same strand into separate lanes so that
   // consecutive overlapping genes do not occlude each other.
