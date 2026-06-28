@@ -373,6 +373,11 @@ def run(
 
     cmd.extend(["--envvars", "PYTHONPATH"])
 
+    if force:
+        unlock_cmd = cmd + ["--unlock"]
+        logger.info("unlocking snakemake directory: %s", " ".join(unlock_cmd))
+        subprocess.run(unlock_cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     logger.info("running snakemake: %s", " ".join(cmd))
     result = subprocess.run(cmd, env=env)
     sys.exit(result.returncode)
