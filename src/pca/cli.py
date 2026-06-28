@@ -257,6 +257,11 @@ def main(ctx: click.Context, quiet: bool) -> None:
     help="Skip tRNAscan-SE gene prediction.",
 )
 @click.option(
+    "--skip-trf",
+    is_flag=True,
+    help="Skip Tandem Repeats Finder repeat detection.",
+)
+@click.option(
     "-db",
     "--db",
     "db_dir",
@@ -312,6 +317,7 @@ def run(
     output_dir: Path,
     input_type: str,
     skip_trna: bool,
+    skip_trf: bool,
     db_dir: Path | None,
     cpus: int,
     plot_formats: tuple[str, ...],
@@ -342,6 +348,9 @@ def run(
 
     if not skip_trna:
         validation.check_executables(["tRNAscan-SE"])
+    run_trf = (not skip_trf) and input_type == "contigs"
+    if run_trf:
+        validation.check_executables(["trf"])
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -352,6 +361,7 @@ def run(
         "db_dir": str(db_dir.resolve()),
         "meta_path": str(Path(meta_path).resolve()),
         "run_trna": not skip_trna,
+        "run_trf": run_trf,
         "plot_formats": list(plot_formats),
         "translation_table": translation_table,
         "theme": theme,

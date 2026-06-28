@@ -21,7 +21,7 @@ from Bio.SeqUtils import gc_fraction
 from BCBio import GFF
 from dna_features_viewer import BiopythonTranslator
 
-from pca.parsers import parse_hmmsearch, parse_trna_gff
+from pca.parsers import parse_hmmsearch, parse_trf_dat, parse_trna_gff
 
 __all__ = [
     "convert_to_html",
@@ -52,6 +52,7 @@ _DEFAULT_CATEGORY_COLORS: dict[str, str] = {
     "unknown": "#c9c9c9",
     "unknown function": "#c9c9c9",
     "tRNA": "#e377c2",
+    "tandem repeat": "#17becf",
 }
 
 # Static plot layout tunables.
@@ -94,6 +95,28 @@ def create_feature(x: pd.Series) -> SeqFeature:
         FeatureLocation(int(x["begin"]), int(x["end"]), strand=int(x["strand"])),
         type="tRNA",
         id=str(x["trna_no"]),
+        qualifiers=qualifiers,
+    )
+
+
+def _create_trf_feature(x: pd.Series) -> SeqFeature:
+    """Create a Biopython SeqFeature from a normalized TRF repeat row."""
+    qualifiers = {
+        "source": "TRF",
+        "score": x["score"],
+        "label": f"{x['period']} bp tandem repeat",
+        "category": "tandem repeat",
+        "color": _DEFAULT_CATEGORY_COLORS["tandem repeat"],
+        "ID": f"trf_{x['trf_no']}",
+        "period": x["period"],
+        "copies": x["copies"],
+        "consensus": x["consensus"],
+        "entropy": x["entropy"],
+    }
+    return SeqFeature(
+        FeatureLocation(int(x["begin"]), int(x["end"]), strand=0),
+        type="tandem_repeat",
+        id=str(x["trf_no"]),
         qualifiers=qualifiers,
     )
 
@@ -204,6 +227,10 @@ def _feature_to_dict(feature: Any) -> dict[str, Any]:
         "GO_hit": _qualifier_to_str(feature.qualifiers.get("GO_hit")),
         "KO_hit": _qualifier_to_str(feature.qualifiers.get("KO_hit")),
         "trna_type": _qualifier_to_str(feature.qualifiers.get("trna_type")),
+        "period": _qualifier_to_str(feature.qualifiers.get("period")),
+        "copies": _qualifier_to_str(feature.qualifiers.get("copies")),
+        "consensus": _qualifier_to_str(feature.qualifiers.get("consensus")),
+        "entropy": _qualifier_to_str(feature.qualifiers.get("entropy")),
     }
 
 
@@ -221,6 +248,10 @@ _TABLE_COLUMNS: list[tuple[str, str]] = [
     ("Pfam_hit", "Pfam hit"),
     ("GO_hit", "GO hit"),
     ("KO_hit", "KO hit"),
+    ("period", "Period"),
+    ("copies", "Copies"),
+    ("consensus", "Consensus"),
+    ("entropy", "Entropy"),
     ("start", "Start"),
     ("end", "End"),
     ("strand", "Strand"),
@@ -1974,6 +2005,7 @@ def generate_plots_and_annotations(
     plot_formats: Sequence[str] = DEFAULT_PLOT_FORMATS,
     translation_table: int | None = None,
     theme: str = "light",
+    trf_path: str | os.PathLike[str] | None = None,
 ) -> None:
     """Generate annotated GFF/GenBank and per-contig plots from HMM results.
 
@@ -2000,6 +2032,9 @@ def generate_plots_and_annotations(
         headers, the actual per-contig table is extracted and this value is
         used only as a fallback. ``None`` means pyrodigal-gv's metagenomic
         auto-selection.
+    trf_path:
+        Optional path to a Tandem Repeats Finder ``.dat`` file.  When provided,
+        repeat regions are added to the GFF/GenBank records and plots.
     """
     tmp_dir = Path(tmp_dir)
     plots_dir = tmp_dir / "plots"
@@ -2026,6 +2061,12 @@ def generate_plots_and_annotations(
     else:
         trna = pd.DataFrame()
 
+    trf_dat = Path(trf_path) if trf_path else None
+    if trf_dat is not None and trf_dat.is_file() and trf_dat.stat().st_size > 0:
+        repeats = pd.DataFrame(parse_trf_dat(trf_dat))
+    else:
+        repeats = pd.DataFrame()
+
     if search_results.empty:
         raise ValueError("hmmsearch returned zero matches")
 
@@ -2033,6 +2074,12 @@ def generate_plots_and_annotations(
         trna = trna.apply(get_coordinates, axis=1).sort_values(by=["contig", "begin"])
     else:
         trna = None
+
+    if not repeats.empty:
+        repeats = repeats.sort_values(by=["contig", "begin"]).reset_index(drop=True)
+        repeats["trf_no"] = repeats.index + 1
+    else:
+        repeats = None
 
     phrogs_anno = pd.read_csv(meta_dir, low_memory=False)
     phrogs_anno = phrogs_anno.rename(
@@ -2042,6 +2089,8 @@ def generate_plots_and_annotations(
     category_colors = dict(zip(phrogs_anno["category"], phrogs_anno["color"]))
     if trna is not None:
         category_colors["tRNA"] = "#e377c2"
+    if repeats is not None:
+        category_colors["tandem repeat"] = _DEFAULT_CATEGORY_COLORS["tandem repeat"]
 
     results_with_annotate = search_results.merge(
         phrogs_anno, how="inner", left_on="tname", right_on="phrog"
@@ -2088,6 +2137,13 @@ def generate_plots_and_annotations(
                     tmp_trna = tmp_trna.reset_index(drop=True)
                     tmp_trna["feature"] = tmp_trna.apply(create_feature, axis=1)
                     record.features.extend(tmp_trna["feature"].to_list())
+
+            if repeats is not None:
+                tmp_repeats = repeats[repeats["contig"] == record.id]
+                if not tmp_repeats.empty:
+                    tmp_repeats = tmp_repeats.reset_index(drop=True)
+                    tmp_repeats["feature"] = tmp_repeats.apply(_create_trf_feature, axis=1)
+                    record.features.extend(tmp_repeats["feature"].to_list())
 
             annotated_records.append(record)
             GFF.write([record], out_handle)

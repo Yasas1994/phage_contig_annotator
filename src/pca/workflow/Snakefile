@@ -8,6 +8,7 @@ The workflow expects ``config.yaml`` in the working directory with at least:
 - ``db_dir``: directory containing HMM database splits
 - ``meta_path``: path to PHROG metadata TSV
 - ``run_trna``: whether to run tRNAscan-SE (default: true)
+- ``run_trf``: whether to run Tandem Repeats Finder (default: true)
 - ``plot_formats``: list of plot formats, e.g. ``["pdf"]`` or ``["pdf", "html"]``
 """
 
@@ -17,6 +18,7 @@ input_path = Path(config["input"])
 output_dir = Path(config["output_dir"])
 input_type = config.get("input_type", "contigs")
 run_trna = config.get("run_trna", True)
+run_trf = config.get("run_trf", True) and input_type == "contigs"
 db_dir = Path(config["db_dir"])
 meta_path = Path(config["meta_path"])
 plot_formats = config.get("plot_formats", ["pdf"])
@@ -27,6 +29,7 @@ proteins_faa = output_dir / "genes" / "proteins.faa"
 proteins_gff = output_dir / "genes" / "proteins.gff"
 trna_tsv = output_dir / "trna" / "trna.tsv"
 trna_gff = output_dir / "trna" / "trna.gff"
+trf_dat = output_dir / "trf" / "trf.dat"
 hmmsearch_txt = output_dir / "hmm" / "hmmsearch.txt"
 hmmsearch_csv = output_dir / "hmm" / "hmmsearch.csv"
 annotations_gff = output_dir / "annotations" / "annotations.gff"
@@ -76,6 +79,35 @@ else:
             import shutil
 
             shutil.copy(input.faa, output.faa)
+
+
+if run_trf:
+
+    rule trf_calling:
+        """Predict tandem repeat regions with TRF."""
+        input:
+            fna=input_path,
+        output:
+            dat=trf_dat,
+        threads: workflow.cores
+        run:
+            from pca.externals import run_trf
+
+            run_trf(
+                out=str(output_dir / "trf" / "trf"),
+                in_=str(input.fna),
+                threads=threads,
+            )
+
+else:
+
+    rule empty_trf:
+        """Create an empty TRF dat file when repeat finding is disabled."""
+        output:
+            dat=trf_dat,
+        run:
+            with open(output.dat, "w") as fh:
+                fh.write("")
 
 
 if run_trna:
@@ -138,6 +170,7 @@ rule annotate:
     input:
         hmmsearch=hmmsearch_txt,
         trna_gff=trna_gff,
+        trf_dat=trf_dat,
         proteins_gff=proteins_gff if input_type == "contigs" else [],
         meta=meta_path,
     output:
@@ -153,6 +186,7 @@ rule annotate:
             tmp_dir=output_dir,
             hmmsearch_dir=input.hmmsearch,
             trna_dir=input.trna_gff,
+            trf_path=input.trf_dat,
             meta_dir=input.meta,
             gff_dir=gff_input,
             input_fasta=input_path,

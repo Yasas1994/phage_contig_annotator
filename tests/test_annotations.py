@@ -2,11 +2,17 @@
 
 from pathlib import Path
 
+import pandas as pd
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
-from pca.annotations import _compute_gc_metrics, _parse_translation_tables, _write_static_plot
+from pca.annotations import (
+    _compute_gc_metrics,
+    _create_trf_feature,
+    _parse_translation_tables,
+    _write_static_plot,
+)
 
 
 def test_compute_gc_metrics_for_simple_sequence() -> None:
@@ -61,3 +67,28 @@ def test_write_static_plot_creates_pdf_and_png(tmp_path: Path) -> None:
     png_path = plots_dir / "test_contig.png"
     assert pdf_path.exists() and pdf_path.stat().st_size > 0
     assert png_path.exists() and png_path.stat().st_size > 0
+
+
+def test_create_trf_feature_builds_repeat_feature() -> None:
+    row = pd.Series(
+        {
+            "begin": 100,
+            "end": 200,
+            "period": 12,
+            "copies": 8.3,
+            "score": 123,
+            "entropy": 1.4,
+            "consensus": "ATATATATATAT",
+            "trf_no": 1,
+        }
+    )
+    feature = _create_trf_feature(row)
+    assert feature.type == "tandem_repeat"
+    assert int(feature.location.start) == 100
+    assert int(feature.location.end) == 200
+    assert feature.location.strand == 0
+    assert feature.qualifiers["category"] == "tandem repeat"
+    assert feature.qualifiers["period"] == 12
+    assert feature.qualifiers["copies"] == 8.3
+    assert feature.qualifiers["consensus"] == "ATATATATATAT"
+    assert feature.qualifiers["ID"] == "trf_1"

@@ -9,7 +9,13 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["parse_blastp", "parse_hmmsearch", "parse_trna", "parse_trna_gff"]
+__all__ = [
+    "parse_blastp",
+    "parse_hmmsearch",
+    "parse_trf_dat",
+    "parse_trna",
+    "parse_trna_gff",
+]
 
 
 def parse_blastp(path: str | Path) -> Iterator[dict[str, Any]]:
@@ -49,6 +55,71 @@ def parse_hmmsearch(path: str | Path) -> Iterator[dict[str, Any]]:
                 yield {names[i]: formats[i](values[i]) for i in range(10)}
             except (ValueError, IndexError):
                 logger.debug("skipping erroneous hmmsearch line: %s", line.rstrip())
+
+
+def parse_trf_dat(path: str | Path) -> Iterator[dict[str, Any]]:
+    """Parse Tandem Repeats Finder (TRF) ``.dat`` output.
+
+    TRF writes one block per input sequence.  Each block starts with a
+    ``Sequence:`` header, followed by a ``Parameters:`` line and then one line
+    per tandem repeat with the 15 space-delimited fields described in the TRF
+    documentation.
+    """
+    names = [
+        "begin",
+        "end",
+        "period",
+        "copies",
+        "consensus_size",
+        "matches",
+        "indels",
+        "score",
+        "a",
+        "c",
+        "g",
+        "t",
+        "entropy",
+        "consensus",
+        "repeat_seq",
+    ]
+    formats = [
+        int,
+        int,
+        int,
+        float,
+        int,
+        int,
+        int,
+        int,
+        float,
+        float,
+        float,
+        float,
+        float,
+        str,
+        str,
+    ]
+
+    contig: str | None = None
+    with open(path) as f:
+        for line in f:
+            line = line.rstrip()
+            if line.startswith("Sequence:"):
+                contig = line.split(":", 1)[1].strip()
+                continue
+            if contig is None or not line or line.startswith("Parameters"):
+                continue
+            values = line.split()
+            if len(values) < 15:
+                continue
+            try:
+                record = {names[i]: formats[i](values[i]) for i in range(15)}
+            except (ValueError, IndexError) as exc:
+                logger.debug("skipping erroneous TRF line: %s (%s)", line, exc)
+                continue
+            record["contig"] = contig
+            record["strand"] = 0
+            yield record
 
 
 def parse_trna(path: str | Path) -> Iterator[dict[str, Any]]:
