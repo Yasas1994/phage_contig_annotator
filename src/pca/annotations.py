@@ -37,10 +37,11 @@ DEFAULT_PLOT_FORMATS = ("pdf",)
 SUPPORTED_PLOT_FORMATS = {"pdf", "png", "html"}
 
 # Static plot layout tunables.
-_STATIC_FIGURE_WIDTH = 15  # inches
+_STATIC_FIGURE_WIDTH = 20  # inches
 _STATIC_MAX_BPS_PER_LINE = 50_000
-_STATIC_LABEL_ROTATION = 45
+_STATIC_LABEL_ROTATION = 90
 _STATIC_PNG_DPI = 300
+_STATIC_LABEL_FONTSIZE = 7
 
 
 def get_coordinates(x: pd.Series) -> pd.Series:
@@ -1559,7 +1560,10 @@ def _write_static_plot(
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch
 
-    graphic_record = BiopythonTranslator().translate_record(record)
+    class _TallTranslator(BiopythonTranslator):
+        graphic_record_parameters = {"feature_level_height": 1.2}
+
+    graphic_record = _TallTranslator().translate_record(record)
     for feat in graphic_record.features:
         if feat.label == "unknown function":
             feat.label = None
@@ -1568,8 +1572,8 @@ def _write_static_plot(
         strand_in_label_threshold=7,
         annotate_inline=False,
         elevate_outline_annotations=True,
-        max_label_length=30,
-        max_line_length=25,
+        max_label_length=22,
+        max_line_length=18,
     )
 
     seq_length = _contig_length(record)
@@ -1595,7 +1599,7 @@ def _write_static_plot(
             text.set_horizontalalignment("left")
             text.set_verticalalignment("bottom")
             text.set_rotation_mode("anchor")
-            text.set_fontsize(9)
+            text.set_fontsize(_STATIC_LABEL_FONTSIZE)
             text.set_bbox(None)
 
     present_categories = {
