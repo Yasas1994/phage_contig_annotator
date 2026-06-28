@@ -342,8 +342,40 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     .attr("class", "tooltip")
     .style("opacity", 0);
 
-  const arrowHeadBp = Math.max(150, contigLength * 0.006);
+  const arrowHeadPx = 7;  // target arrow-head width in screen pixels
   const featureHeight = 22;
+
+  // Compute a per-feature maximum arrow-head size (in bp) so arrow heads do
+  // not visually overlap other features.  The head is drawn inside the
+  // feature's own interval, so we shrink it until the head region is clear
+  // of every other feature.
+  const targetBp = x.invert(arrowHeadPx) - x.invert(0);
+  for (let i = 0; i < data.length; i++) {
+    const d = data[i];
+    let maxHeadBp = targetBp;
+    if (d.strand === 1) {
+      // Head would occupy [d.end - maxHeadBp, d.end].
+      for (let j = 0; j < data.length; j++) {
+        if (i === j) continue;
+        const o = data[j];
+        if (o.start < d.end && o.end > d.end - targetBp) {
+          const cap = (o.end <= d.end) ? d.end - o.end : d.end - o.start;
+          maxHeadBp = Math.min(maxHeadBp, cap);
+        }
+      }
+    } else {
+      // Head would occupy [d.start, d.start + maxHeadBp].
+      for (let j = 0; j < data.length; j++) {
+        if (i === j) continue;
+        const o = data[j];
+        if (o.end > d.start && o.start < d.start + targetBp) {
+          const cap = (o.start >= d.start) ? o.start - d.start : o.end - d.start;
+          maxHeadBp = Math.min(maxHeadBp, cap);
+        }
+      }
+    }
+    d.maxHeadBp = Math.max(0, maxHeadBp);
+  }
 
   // --- Overview bar ---
   const overviewDiv = d3.select("#overview");
@@ -411,7 +443,8 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     const start = currentXScale(d.start);
     const end = currentXScale(d.end);
     const w = Math.max(0, end - start);
-    const headPixels = Math.min(x(arrowHeadBp), w / 2);
+    const maxHeadBp = (d.maxHeadBp !== undefined) ? d.maxHeadBp : x.invert(arrowHeadPx) - x.invert(0);
+    const headPixels = Math.min(x(maxHeadBp), w / 2);
     const cy = d.strand === 1 ? forwardY : reverseY;
     const y0 = cy - featureHeight / 2;
     const y1 = cy + featureHeight / 2;
