@@ -37,11 +37,11 @@ DEFAULT_PLOT_FORMATS = ("pdf",)
 SUPPORTED_PLOT_FORMATS = {"pdf", "png", "html"}
 
 # Static plot layout tunables.
-_STATIC_FIGURE_WIDTH = 20  # inches
+_STATIC_FIGURE_WIDTH = 24  # inches
 _STATIC_MAX_BPS_PER_LINE = 50_000
-_STATIC_LABEL_ROTATION = 90
+_STATIC_LABEL_ROTATION = 45
 _STATIC_PNG_DPI = 300
-_STATIC_LABEL_FONTSIZE = 7
+_STATIC_LABEL_FONTSIZE = 6.5
 
 
 def get_coordinates(x: pd.Series) -> pd.Series:
@@ -624,7 +624,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   }
 </style>
 </head>
-<body>
+<body class="__THEME_CLASS__" data-theme="__THEME__">
 
 <div class="ph-header">
   <div class="ph-topbar">
@@ -702,11 +702,20 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   function updateThemeIcon() {
     themeToggle.textContent = docBody.classList.contains("dark") ? "\u2600" : "\u263E";
   }
-  try {
-    const savedTheme = localStorage.getItem("pca-theme");
-    if (savedTheme === "dark") docBody.classList.add("dark");
-    else if (savedTheme === "light") docBody.classList.remove("dark");
-  } catch (e) {}
+  // Respect the theme chosen when the file was generated. Only fall back
+  // to a saved browser preference when no explicit theme was baked in.
+  const initialTheme = docBody.dataset.theme;
+  if (initialTheme === "dark") {
+    docBody.classList.add("dark");
+  } else if (initialTheme === "light") {
+    docBody.classList.remove("dark");
+  } else {
+    try {
+      const savedTheme = localStorage.getItem("pca-theme");
+      if (savedTheme === "dark") docBody.classList.add("dark");
+      else if (savedTheme === "light") docBody.classList.remove("dark");
+    } catch (e) {}
+  }
   updateThemeIcon();
   themeToggle.addEventListener("click", function() {
     docBody.classList.toggle("dark");
@@ -1438,6 +1447,7 @@ def _write_interactive_plot(
     contig_length: int,
     category_colors: dict[str, str],
     translation_table: int | None = None,
+    theme: str = "light",
 ) -> None:
     """Write an interactive D3.js HTML genome map for a contig.
 
@@ -1519,6 +1529,8 @@ def _write_interactive_plot(
         positions, gc_values, skew_values, cumulative_skew = [], [], [], []
 
     safe_title = html.escape(record.id)
+    theme_class = "dark" if theme.lower() == "dark" else ""
+    theme_value = "dark" if theme.lower() == "dark" else "light"
     html_content = (
         _D3_HTML_TEMPLATE
         .replace("__TITLE__", safe_title)
@@ -1537,6 +1549,8 @@ def _write_interactive_plot(
         .replace("__GC_CONTENT_JSON__", json.dumps(gc_values))
         .replace("__GC_SKEW_JSON__", json.dumps(skew_values))
         .replace("__GC_CUM_SKEW_JSON__", json.dumps(cumulative_skew))
+        .replace("__THEME_CLASS__", theme_class)
+        .replace("__THEME__", theme_value)
     )
 
     out_path = plots_dir / f"{record.id}.html"
@@ -1548,6 +1562,7 @@ def _write_static_plot(
     plots_dir: Path,
     format: str,
     category_colors: dict[str, str],
+    theme: str = "light",
 ) -> None:
     """Write a static matplotlib genome map for a contig with a category legend.
 
@@ -1559,75 +1574,93 @@ def _write_static_plot(
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.patches import Patch
+    from matplotlib.ticker import MaxNLocator
+
+    is_dark = theme.lower() == "dark"
+    style = "dark_background" if is_dark else "default"
+
+    def _feature_properties(_feature: Any) -> dict[str, Any]:
+        if is_dark:
+            return {"linecolor": "white", "label_link_color": "white"}
+        return {}
 
     class _TallTranslator(BiopythonTranslator):
-        graphic_record_parameters = {"feature_level_height": 1.2}
+        graphic_record_parameters = {"feature_level_height": 2.0, "labels_spacing": 30}
 
-    graphic_record = _TallTranslator().translate_record(record)
-    for feat in graphic_record.features:
-        if feat.label == "unknown function":
-            feat.label = None
+    with plt.style.context(style):
+        graphic_record = _TallTranslator(
+            features_properties=_feature_properties
+        ).translate_record(record)
+        for feat in graphic_record.features:
+            if feat.label == "unknown function":
+                feat.label = None
 
-    plot_kwargs = dict(
-        strand_in_label_threshold=7,
-        annotate_inline=False,
-        elevate_outline_annotations=True,
-        max_label_length=22,
-        max_line_length=18,
-    )
-
-    seq_length = _contig_length(record)
-    axes: list[Any]
-    if seq_length > _STATIC_MAX_BPS_PER_LINE:
-        n_lines = (seq_length + _STATIC_MAX_BPS_PER_LINE - 1) // _STATIC_MAX_BPS_PER_LINE
-        fig, raw_axes = graphic_record.plot_on_multiple_lines(
-            n_lines=n_lines,
-            figure_width=_STATIC_FIGURE_WIDTH,
-            **plot_kwargs,
+        plot_kwargs = dict(
+            strand_in_label_threshold=7,
+            annotate_inline=False,
+            elevate_outline_annotations=True,
+            max_label_length=22,
+            max_line_length=18,
         )
-        axes = list(raw_axes) if n_lines > 1 else [raw_axes]
-        fig.suptitle(record.id, fontsize=14)
-    else:
-        fig, ax1 = plt.subplots(1, 1, figsize=(_STATIC_FIGURE_WIDTH, 4))
-        ax, _ = graphic_record.plot(ax=ax1, **plot_kwargs)
-        ax.set_title(record.id)
-        axes = [ax]
 
-    for ax in axes:
-        for text in ax.texts:
-            text.set_rotation(_STATIC_LABEL_ROTATION)
-            text.set_horizontalalignment("left")
-            text.set_verticalalignment("bottom")
-            text.set_rotation_mode("anchor")
-            text.set_fontsize(_STATIC_LABEL_FONTSIZE)
-            text.set_bbox(None)
-
-    present_categories = {
-        _qualifier_to_str(f.qualifiers.get("category"))
-        for f in record.features
-        if _qualifier_to_str(f.qualifiers.get("category"))
-    }
-    if present_categories:
-        legend_handles = [
-            Patch(facecolor=color, edgecolor="#333333", label=category)
-            for category, color in category_colors.items()
-            if category in present_categories
-        ]
-        if legend_handles:
-            axes[0].legend(
-                handles=legend_handles,
-                loc="upper left",
-                bbox_to_anchor=(1.01, 1.0),
-                title="Category",
-                frameon=True,
+        seq_length = _contig_length(record)
+        axes: list[Any]
+        if seq_length > _STATIC_MAX_BPS_PER_LINE:
+            n_lines = (seq_length + _STATIC_MAX_BPS_PER_LINE - 1) // _STATIC_MAX_BPS_PER_LINE
+            fig, raw_axes = graphic_record.plot_on_multiple_lines(
+                n_lines=n_lines,
+                figure_width=_STATIC_FIGURE_WIDTH,
+                **plot_kwargs,
             )
-            fig.subplots_adjust(right=0.82)
+            axes = list(raw_axes) if n_lines > 1 else [raw_axes]
+            fig.suptitle(record.id, fontsize=14)
+        else:
+            fig, ax1 = plt.subplots(1, 1, figsize=(_STATIC_FIGURE_WIDTH, 4))
+            ax, _ = graphic_record.plot(ax=ax1, **plot_kwargs)
+            ax.set_title(record.id)
+            axes = [ax]
 
-    out_path = plots_dir / f"{record.id}.{format}"
-    savefig_kwargs = {"bbox_inches": "tight", "format": format, "pad_inches": 0.3}
-    if format == "png":
-        savefig_kwargs["dpi"] = _STATIC_PNG_DPI
-    fig.savefig(str(out_path), **savefig_kwargs)
+        for ax in axes:
+            for text in ax.texts:
+                text.set_rotation(_STATIC_LABEL_ROTATION)
+                text.set_horizontalalignment("left")
+                text.set_verticalalignment("bottom")
+                text.set_rotation_mode("anchor")
+                text.set_fontsize(_STATIC_LABEL_FONTSIZE)
+                text.set_bbox(None)
+            # Reduce tick density and angle the x-axis labels so they fit.
+            ax.xaxis.set_major_locator(MaxNLocator(nbins=6))
+            for tick_label in ax.get_xticklabels():
+                tick_label.set_rotation(30)
+                tick_label.set_horizontalalignment("right")
+
+        present_categories = {
+            _qualifier_to_str(f.qualifiers.get("category"))
+            for f in record.features
+            if _qualifier_to_str(f.qualifiers.get("category"))
+        }
+        if present_categories:
+            legend_edge = "#dddddd" if is_dark else "#333333"
+            legend_handles = [
+                Patch(facecolor=color, edgecolor=legend_edge, label=category)
+                for category, color in category_colors.items()
+                if category in present_categories
+            ]
+            if legend_handles:
+                axes[0].legend(
+                    handles=legend_handles,
+                    loc="upper left",
+                    bbox_to_anchor=(1.01, 1.0),
+                    title="Category",
+                    frameon=True,
+                )
+                fig.subplots_adjust(right=0.82)
+
+        out_path = plots_dir / f"{record.id}.{format}"
+        savefig_kwargs = {"bbox_inches": "tight", "format": format, "pad_inches": 0.3}
+        if format == "png":
+            savefig_kwargs["dpi"] = _STATIC_PNG_DPI
+        fig.savefig(str(out_path), **savefig_kwargs)
     plt.clf()
     plt.close("all")
 
@@ -1650,6 +1683,7 @@ def generate_plots_and_annotations(
     input_fasta: str | os.PathLike[str],
     plot_formats: Sequence[str] = DEFAULT_PLOT_FORMATS,
     translation_table: int | None = None,
+    theme: str = "light",
 ) -> None:
     """Generate annotated GFF/GenBank and per-contig plots from HMM results.
 
@@ -1775,12 +1809,12 @@ def generate_plots_and_annotations(
                     record.id, translation_table
                 )
                 _write_interactive_plot(
-                    record, plots_dir, contig_length, category_colors, record_translation_table
+                    record, plots_dir, contig_length, category_colors, record_translation_table, theme
                 )
 
             static_formats = requested_formats & {"pdf", "png"}
             for fmt in static_formats:
-                _write_static_plot(record, plots_dir, fmt, category_colors)
+                _write_static_plot(record, plots_dir, fmt, category_colors, theme)
 
     # Write per-format sentinel files so workflow engines can depend on
     # specific formats rather than the whole plots directory.

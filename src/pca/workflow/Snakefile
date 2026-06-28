@@ -21,6 +21,7 @@ db_dir = Path(config["db_dir"])
 meta_path = Path(config["meta_path"])
 plot_formats = config.get("plot_formats", ["pdf"])
 translation_table = config.get("translation_table", None)
+theme = config.get("theme", "light")
 
 proteins_faa = output_dir / "genes" / "proteins.faa"
 proteins_gff = output_dir / "genes" / "proteins.gff"
@@ -157,4 +158,5 @@ rule annotate:
             input_fasta=input_path,
             plot_formats=plot_formats,
             translation_table=translation_table,
+            theme=theme,
         )

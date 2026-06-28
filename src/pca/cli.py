@@ -298,6 +298,13 @@ def main(ctx: click.Context, quiet: bool) -> None:
     is_flag=True,
     help="Force re-execution of all workflow steps.",
 )
+@click.option(
+    "--theme",
+    default="light",
+    show_default=True,
+    type=click.Choice(["light", "dark"], case_sensitive=False),
+    help="Color theme for generated plots.",
+)
 @click.pass_context
 def run(
     ctx: click.Context,
@@ -311,6 +318,7 @@ def run(
     translation_table: int | None,
     dry_run: bool,
     force: bool,
+    theme: str,
 ) -> None:
     """Run the full annotation pipeline."""
     logger = get_logger(quiet=ctx.obj["quiet"])
@@ -346,6 +354,7 @@ def run(
         "run_trna": not skip_trna,
         "plot_formats": list(plot_formats),
         "translation_table": translation_table,
+        "theme": theme,
     }
 
     config_path = output_dir / "config.yaml"
