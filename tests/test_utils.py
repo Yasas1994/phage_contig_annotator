@@ -2,6 +2,7 @@
 
 import argparse
 import gzip
+import logging
 from pathlib import Path
 
 import pytest
@@ -45,6 +46,41 @@ class TestModuleFacades:
 
     def test_logger_symbol_re_exported(self) -> None:
         assert utils.get_logger is logutils.get_logger
+
+
+class TestLogger:
+    def test_get_logger_colors_level_name_when_tty(self, monkeypatch) -> None:
+        monkeypatch.setattr("sys.stderr.isatty", lambda: True)
+        log = logutils.get_logger()
+        handler = log.handlers[0]
+        record = logging.LogRecord(
+            name="pca",
+            level=logging.ERROR,
+            pathname="",
+            lineno=0,
+            msg="test",
+            args=(),
+            exc_info=None,
+        )
+        formatted = handler.format(record)
+        assert "\033[31mERROR\033[0m" in formatted
+
+    def test_get_logger_does_not_color_when_not_tty(self, monkeypatch) -> None:
+        monkeypatch.setattr("sys.stderr.isatty", lambda: False)
+        log = logutils.get_logger()
+        handler = log.handlers[0]
+        record = logging.LogRecord(
+            name="pca",
+            level=logging.ERROR,
+            pathname="",
+            lineno=0,
+            msg="test",
+            args=(),
+            exc_info=None,
+        )
+        formatted = handler.format(record)
+        assert "ERROR" in formatted
+        assert "\033[" not in formatted
 
 
 class TestCompression:
