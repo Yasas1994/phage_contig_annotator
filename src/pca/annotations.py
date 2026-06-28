@@ -179,7 +179,8 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   body { font-family: Arial, Helvetica, sans-serif; margin: 20px; background: #fff; }
   #controls { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   #controls button, #controls label { padding: 4px 8px; }
-  #overview { width: 100%; height: 34px; margin-bottom: 6px; border: 1px solid #ddd; background: #fafafa; }
+  #overview { width: 100%; height: 55px; margin-bottom: 6px; border: 1px solid #ddd; background: #fafafa; }
+  .overview-axis text { font-size: 10px; fill: #555; }
   #chart { width: 100%; overflow: hidden; border: 1px solid #eee; cursor: grab; touch-action: none; }
   #chart:active { cursor: grabbing; }
   .axis path, .axis line { fill: none; stroke: #333; shape-rendering: crispEdges; }
@@ -254,7 +255,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const legendRowHeight = 44;
   const legendHeight = legendRowHeight * Object.keys(categoryColors).length + 30;
   const plotHeight = Math.max(trackHeightTotal, legendHeight);
-  const overviewHeight = 34;
+  const overviewHeight = 55;
 
   const chartDiv = document.getElementById("chart");
   let width = Math.max(600, chartDiv.clientWidth) - margin.left - margin.right;
@@ -356,15 +357,29 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const overviewX = d3.scaleLinear().domain([0, contigLength]).range([0, overviewWidth]);
   const overviewGroup = overviewSvg.append("g");
 
+  const overviewAxis = d3.axisTop(overviewX)
+    .ticks(Math.max(2, Math.floor(overviewWidth / 80)))
+    .tickSize(4)
+    .tickFormat(d3.format("~s"));
+  overviewGroup.append("g")
+    .attr("class", "overview-axis")
+    .attr("transform", "translate(0,22)")
+    .call(overviewAxis)
+    .selectAll("text")
+    .attr("dy", "-2px");
+
+  const overviewGeneHeight = 8;
+  const overviewForwardY = 26;
+  const overviewReverseY = 38;
   overviewGroup.selectAll(".overview-gene")
     .data(data.filter(function(d) { return d.phrog || d.label; }))
     .enter()
     .append("rect")
     .attr("class", "overview-gene")
     .attr("x", function(d) { return overviewX(d.start); })
-    .attr("y", function(d) { return d.strand === 1 ? 2 : 18; })
+    .attr("y", function(d) { return d.strand === 1 ? overviewForwardY : overviewReverseY; })
     .attr("width", function(d) { return Math.max(1, overviewX(d.end) - overviewX(d.start)); })
-    .attr("height", 14)
+    .attr("height", overviewGeneHeight)
     .attr("fill", function(d) { return categoryColors[d.category] || d.color || "#c9c9c9"; })
     .attr("stroke", "none");
 
