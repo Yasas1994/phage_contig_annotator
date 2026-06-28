@@ -141,3 +141,25 @@ toggles between light and dark modes.
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/example_dark.png">
   <img src="docs/images/example_light.png" alt="Genome map of a phage contig annotated with PHROG categories">
 </picture>
+
+### Interactive HTML report
+
+Generate an interactive HTML report in addition to (or instead of) static maps:
+
+```bash
+phage_contig_annotator run --input test/bin.460.fna --output output_dir \
+  --plot-format pdf --plot-format html
+```
+
+The HTML report lets you pan and zoom along the contig, toggle gene labels,
+show/hide genes without PHROG hits, and switch between light and dark themes.
+It also shows GC content, GC skew, and cumulative GC skew tracks.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/html_report_dark.png">
+  <img src="docs/images/html_report_light.png" alt="Interactive HTML report of a phage contig">
+</picture>
+
+An example report is included at [docs/examples/NODE_94_report.html](docs/examples/NODE_94_report.html).
+Open it locally after cloning, or enable GitHub Pages on the `docs/` folder to
+view it directly in a browser.

@@ -1,0 +1,1200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NODE_94_length_44776_cov_27.159388</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #1a1a18;
+    --text-muted: #666;
+    --link: #185fa5;
+    --border: #d3d1c7;
+    --header-bg: #ebebea;
+    --header-text: #888780;
+    --body-bg: #ffffff;
+    --metric-bg: #f5f5f3;
+    --chip-bg: #e6f1fb;
+    --chip-text: #185fa5;
+    --chip-border: #b5d4f4;
+    --btn-bg: #fff;
+    --btn-text: #1a1a18;
+    --btn-border: #c0bfb8;
+    --btn-hover: #ebebea;
+    --overview-bg: #fafafa;
+    --overview-border: #ddd;
+    --chart-bg: #ffffff;
+    --chart-border: #eee;
+    --chart-axis: #333;
+    --chart-axis-text: #555;
+    --chart-text: #333;
+    --gene-stroke: #333;
+    --gene-stroke-strong: #000;
+    --center-line: #999;
+    --gc-chart-bg: #fafaf9;
+    --gc-chart-border: #e3e1db;
+    --gc-axis: #e0ded8;
+    --gc-axis-text: #8c8a82;
+    --gc-zero: #c9c7c1;
+    --gc-crosshair: #8c8a82;
+    --gc-title: #6b6961;
+    --tooltip-bg: rgba(255, 255, 255, 0.95);
+    --tooltip-border: #ccc;
+    --tooltip-text: #1a1a18;
+    --tooltip-shadow: rgba(0,0,0,0.2);
+    --table-bg: #fff;
+    --table-header-bg: #f0efea;
+    --table-header-text: #666;
+    --table-row-even: #fafaf9;
+    --table-row-hover: rgba(0,0,0,0.03);
+    --highlight-overlay: rgba(0,0,0,0.35);
+    --legend-box-stroke: #333;
+    --overview-viewport-fill: rgba(70,130,180,0.15);
+    --overview-viewport-stroke: #4682b4;
+  }
+  body.dark {
+    --bg: #1a1a1a;
+    --text: #e8e6e1;
+    --text-muted: #a09c90;
+    --link: #7ab8ff;
+    --border: #3f3e3a;
+    --header-bg: #2a2a28;
+    --header-text: #9c9a92;
+    --body-bg: #1e1e1e;
+    --metric-bg: #2a2a28;
+    --chip-bg: #1f3a55;
+    --chip-text: #7ab8ff;
+    --chip-border: #365c82;
+    --btn-bg: #2a2a28;
+    --btn-text: #e8e6e1;
+    --btn-border: #5f5e5a;
+    --btn-hover: #3f3e3a;
+    --overview-bg: #222220;
+    --overview-border: #3f3e3a;
+    --chart-bg: #1e1e1e;
+    --chart-border: #3f3e3a;
+    --chart-axis: #8c8a82;
+    --chart-axis-text: #a09c90;
+    --chart-text: #c9c7c1;
+    --gene-stroke: #8c8a82;
+    --gene-stroke-strong: #e8e6e1;
+    --center-line: #5f5e5a;
+    --gc-chart-bg: #222220;
+    --gc-chart-border: #3f3e3a;
+    --gc-axis: #3f3e3a;
+    --gc-axis-text: #9c9a92;
+    --gc-zero: #5f5e5a;
+    --gc-crosshair: #a09c90;
+    --gc-title: #9c9a92;
+    --tooltip-bg: rgba(40, 40, 40, 0.95);
+    --tooltip-border: #5f5e5a;
+    --tooltip-text: #e8e6e1;
+    --tooltip-shadow: rgba(0,0,0,0.5);
+    --table-bg: #222220;
+    --table-header-bg: #2e2e2c;
+    --table-header-text: #a09c90;
+    --table-row-even: #2a2a28;
+    --table-row-hover: rgba(255,255,255,0.05);
+    --highlight-overlay: rgba(255,255,255,0.2);
+    --legend-box-stroke: #8c8a82;
+    --overview-viewport-fill: rgba(100,160,220,0.25);
+    --overview-viewport-stroke: #6aa9e6;
+  }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 20px;
+    background: var(--bg);
+    color: var(--text);
+    transition: background 0.2s, color 0.2s;
+  }
+  #theme-toggle {
+    background: transparent;
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--header-text);
+    line-height: 1;
+  }
+  #theme-toggle:hover { background: var(--btn-hover); }
+  #controls { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  #controls button, #controls label {
+    padding: 4px 8px;
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    border: 0.5px solid var(--btn-border);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  #controls button { cursor: pointer; }
+  #controls button:hover { background: var(--btn-hover); }
+  #controls input[type="checkbox"] { accent-color: var(--link); }
+  #overview { width: 100%; height: 55px; margin-bottom: 6px; border: 1px solid var(--overview-border); background: var(--overview-bg); }
+  .overview-axis text { font-size: 10px; fill: var(--chart-axis-text); }
+  #chart { width: 100%; overflow: hidden; border: 1px solid var(--chart-border); background: var(--chart-bg); cursor: grab; touch-action: none; }
+  #chart:active { cursor: grabbing; }
+  .axis path, .axis line { fill: none; stroke: var(--chart-axis); shape-rendering: crispEdges; }
+  .axis text { font-size: 12px; fill: var(--chart-axis-text); }
+  .axis-label { font-size: 14px; fill: var(--chart-axis-text); }
+  .track-label { font-size: 12px; font-weight: bold; fill: var(--chart-text); }
+  .center-line { stroke: var(--center-line); stroke-width: 1; }
+  .gene { stroke: var(--gene-stroke); stroke-width: 1px; cursor: pointer; }
+  .gene:hover { stroke: var(--gene-stroke-strong); stroke-width: 2px; }
+  .gene.selected { stroke: var(--gene-stroke-strong); stroke-width: 3px; }
+  .label { font-size: 11px; fill: var(--chart-text); pointer-events: none; }
+  .label.hidden { display: none; }
+  .tooltip {
+    position: absolute;
+    text-align: left;
+    padding: 8px;
+    font-size: 12px;
+    background: var(--tooltip-bg);
+    border: 1px solid var(--tooltip-border);
+    border-radius: 4px;
+    pointer-events: none;
+    box-shadow: 2px 2px 6px var(--tooltip-shadow);
+    color: var(--tooltip-text);
+  }
+  .legend { font-size: 12px; }
+  .legend-box { stroke: var(--legend-box-stroke); stroke-width: 1px; }
+  .legend-title { font-weight: bold; font-size: 13px; fill: var(--text); }
+  .legend-label { font-size: 12px; line-height: 1.2; word-wrap: break-word; color: var(--text); }
+  #annotation-table { margin-top: 28px; }
+  #annotation-table h4 {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .table-wrap {
+    border: 0.5px solid var(--border);
+    border-radius: 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: var(--table-bg);
+  }
+  #annotation-table table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 12px;
+    background: transparent;
+  }
+  #annotation-table th {
+    background: var(--table-header-bg);
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--table-header-text);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 0.5px solid var(--border);
+    white-space: nowrap;
+  }
+  #annotation-table td {
+    padding: 7px 10px;
+    text-align: left;
+    border-bottom: 0.5px solid var(--border);
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: top;
+    cursor: pointer;
+    color: var(--text);
+  }
+  #annotation-table td.expander-col {
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
+    text-align: center;
+    vertical-align: middle;
+    cursor: default;
+  }
+  .row-expander {
+    padding: 2px 6px;
+    font-size: 11px;
+    border: 0.5px solid var(--btn-border);
+    border-radius: 6px;
+    background: var(--btn-bg);
+    cursor: pointer;
+    color: var(--link);
+    white-space: nowrap;
+  }
+  .row-expander:hover { background: var(--btn-hover); }
+  #annotation-table td[data-col="hostDomain"],
+  #annotation-table td[data-col="RefSeq"],
+  #annotation-table td[data-col="Pfam_hit"],
+  #annotation-table td[data-col="GO_hit"],
+  #annotation-table td[data-col="KO_hit"],
+  #annotation-table td[data-col="label"],
+  #annotation-table td[data-col="category"] {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 120px;
+    max-width: 220px;
+  }
+  #annotation-table tr.expanded td[data-col="hostDomain"],
+  #annotation-table tr.expanded td[data-col="RefSeq"],
+  #annotation-table tr.expanded td[data-col="Pfam_hit"],
+  #annotation-table tr.expanded td[data-col="GO_hit"],
+  #annotation-table tr.expanded td[data-col="KO_hit"],
+  #annotation-table tr.expanded td[data-col="label"],
+  #annotation-table tr.expanded td[data-col="category"] {
+    white-space: normal;
+    word-break: break-word;
+    overflow: visible;
+    text-overflow: unset;
+    max-width: 600px;
+  }
+  #annotation-table tr:last-child td { border-bottom: none; }
+  #annotation-table tr { background-color: var(--row-bg, transparent); transition: background 0.1s; }
+  #annotation-table tr:nth-child(even) { background-color: var(--row-bg-even, var(--table-bg)); }
+  body.dark #annotation-table tr,
+  body.dark #annotation-table tr:nth-child(even) { background-color: var(--table-bg) !important; }
+  #annotation-table tr:not(.annotation-row-highlight):hover td { background: var(--table-row-hover); }
+  #annotation-table tr.annotation-row-highlight td {
+    box-shadow: inset 0 0 0 1000px var(--highlight-overlay);
+    font-weight: 600;
+  }
+  .pagination {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .pagination button {
+    padding: 4px 10px;
+    font-size: 12px;
+    border: 0.5px solid var(--btn-border);
+    border-radius: 6px;
+    background: var(--btn-bg);
+    cursor: pointer;
+    color: var(--btn-text);
+  }
+  .pagination button:hover:not(:disabled) { background: var(--btn-hover); }
+  .pagination button:disabled { opacity: 0.4; cursor: default; }
+  .pagination .page-info { margin: 0 4px; }
+  .zoom-hint { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+  /* ── Report header ────────────────────────────────────────── */
+  .ph-header {
+    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 20px;
+    background: var(--body-bg);
+    border: 0.5px solid var(--border);
+  }
+  .ph-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 18px;
+    background: var(--header-bg);
+    gap: 10px;
+  }
+  .ph-tool-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--header-text);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .ph-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--link);
+    flex-shrink: 0;
+  }
+  .ph-timestamp {
+    font-size: 11px;
+    color: var(--header-text);
+    letter-spacing: 0.03em;
+  }
+  .ph-body {
+    padding: 16px 20px 18px;
+    background: var(--body-bg);
+  }
+  .ph-contig-id {
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    margin: 0 0 14px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    word-break: break-all;
+  }
+  .ph-chip {
+    font-size: 10px;
+    font-weight: 500;
+    background: var(--chip-bg);
+    color: var(--chip-text);
+    border: 0.5px solid var(--chip-border);
+    border-radius: 4px;
+    padding: 2px 7px;
+    white-space: nowrap;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .ph-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+  }
+  .ph-metric {
+    background: var(--metric-bg);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px;
+  }
+  .ph-metric-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 4px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .ph-metric-value {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+  .ph-metric-value .unit {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 2px;
+  }
+  #gc-plots {
+    margin: 8px 0;
+  }
+  .gc-chart {
+    width: 100%;
+    height: 55px;
+    margin-bottom: 3px;
+    border: 0.5px solid var(--gc-chart-border);
+    border-radius: 4px;
+    background: var(--gc-chart-bg);
+    position: relative;
+    overflow: hidden;
+  }
+  .gc-chart:last-child { margin-bottom: 0; }
+  .gc-chart svg { display: block; background: transparent; }
+  .gc-chart path.line {
+    fill: none;
+    stroke-width: 1.25px;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .gc-chart .axis text { font-size: 9px; fill: var(--gc-axis-text); }
+  .gc-chart .axis path, .gc-chart .axis line { stroke: var(--gc-axis); }
+  .gc-chart .zero-line { stroke: var(--gc-zero); stroke-dasharray: 2,2; pointer-events: none; }
+  .gc-chart .crosshair {
+    stroke: var(--gc-crosshair);
+    stroke-dasharray: 2,2;
+    stroke-width: 1px;
+    pointer-events: none;
+  }
+  .gc-chart .gc-title {
+    font-size: 9px;
+    font-weight: 500;
+    fill: var(--gc-title);
+    pointer-events: none;
+  }
+</style>
+</head>
+<body class="" data-theme="light">
+
+<div class="ph-header">
+  <div class="ph-topbar">
+    <div class="ph-tool-badge">
+      <div class="ph-dot"></div>
+      phage_contig_annotator · PHROG annotation pipeline
+    </div>
+    <button id="theme-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
+    <div class="ph-timestamp">2026-06-28 · 23:15:02 UTC+0200</div>
+  </div>
+  <div class="ph-body">
+    <div class="ph-contig-id">
+      NODE_94_length_44776_cov_27.159388
+      <span class="ph-chip">phage contig</span>
+    </div>
+    <div class="ph-metrics">
+      <div class="ph-metric">
+        <div class="ph-metric-label">Contig length</div>
+        <div class="ph-metric-value">44,776 <span class="unit">bp</span></div>
+      </div>
+      <div class="ph-metric">
+        <div class="ph-metric-label">GC content</div>
+        <div class="ph-metric-value">53.7<span class="unit">%</span></div>
+      </div>
+      <div class="ph-metric">
+        <div class="ph-metric-label">Strand bias</div>
+        <div class="ph-metric-value">Forward <span class="unit">dominant</span></div>
+      </div>
+      <div class="ph-metric">
+        <div class="ph-metric-label">PHROG hits</div>
+        <div class="ph-metric-value">13 <span class="unit">annotated</span></div>
+      </div>
+      <div class="ph-metric">
+        <div class="ph-metric-label">Translation table</div>
+        <div class="ph-metric-value">11 <span class="unit">bacterial</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="controls">
+  <button id="pan-left">&larr; Pan</button>
+  <button id="pan-right">Pan &rarr;</button>
+  <button id="zoom-in">Zoom in</button>
+  <button id="zoom-out">Zoom out</button>
+  <button id="zoom-reset">Reset</button>
+  <label><input type="checkbox" id="show-labels" checked> Show labels</label>
+  <label><input type="checkbox" id="show-no-phrog"> Show genes without PHROGs</label>
+  <span class="zoom-hint">Wheel = zoom &middot; Shift+wheel / horizontal swipe = pan</span>
+</div>
+<div id="overview"></div>
+<div id="gc-plots">
+  <div class="gc-chart" id="gc-content-chart"></div>
+  <div class="gc-chart" id="gc-skew-chart"></div>
+  <div class="gc-chart" id="gc-cumskew-chart"></div>
+</div>
+<div id="chart"></div>
+<div id="annotation-table"></div>
+
+<script>
+(function() {
+  const data = [{"start": 2, "end": 494, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "36.42", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 490, "end": 1072, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "38.59", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 1074, "end": 1587, "strand": 1, "label": "unknown function", "category": "unknown function", "color": "#c9c9c9", "phrog": "phrog_4182", "score": "141.3", "eval": "5.4e-43", "hostDomain": "Bacteria:33", "Avg_#AA": "381.0", "#ColMSA": "451.0", "#prot": "33", "RefSeq": "hypothetical protein [n=31]; protein of an unannotated phage [n=1]; AAA family ATPase [n=1];", "Pfam_hit": "PF00625.20&Guanylate_kin ; Guanylate kinase&98.0&9.9E-10&1.9E-13&0.0&23&144-166&1-23!!!PF01712.18&dNK ; Deoxynucleoside kinase&98.0&1.4E-09&2.7E-13&0.0&74&222-296&116-200!!!PF07931.11&CPT ; Chloramphenicol phosphotransferase-like protein&97.9&2.7E-09&5.2E-13&0.0&139&145-292&1-162!!!PF03976.13&PPK2 ; Polyphosphate kinase 2 (PPK2)&97.9&2.8E-09&5.5E-13&0.0&24&143-166&26-49!!!PF08433.9&KTI12 ; Chromatin associated protein KTI12&97.8&3.3E-09&6.5E-13&0.0&99&145-245&1-122!!!PF03668.14&ATP_bind_2 ; P-loop ATPase protein family&97.7&1.3E-08&2.5E-12&0.0&140&145-295&1-155!!!PF06414.11&Zeta_toxin ; Zeta toxin&97.5&2.9E-08&5.7E-12&0.0&101&142-244&11-140!!!PF02223.16&Thymidylate_kin ; Thymidylate kinase&97.5&3.1E-08&6.1E-12&0.0&63&221-287&118-180!!!PF13671.5&AAA_33 ; AAA domain&97.5&4.1E-08&8.2E-12&0.0&97&147-245&1-122!!!PF01745.15&IPT ; Isopentenyl transferase&97.4&5.1E-08&1E-11&0.0&33&145-177&1-35!!!PF01591.17&6PF2K ; 6-phosphofructo-2-kinase&97.4&7.5E-08&1.5E-11&0.0&32&142-173&6-39!!!PF01202.21&SKI ; Shikimate kinase&97.3&1.1E-07&2.1E-11&0.0&134&154-292&1-154!!!PF00406.21&ADK ; Adenylate kinase&97.2&2E-07&3.9E-11&0.0&94&150-245&1-123!!!PF13238.5&AAA_18 ; AAA domain&97.0&6.3E-07&1.2E-10&0.0&19&148-166&1-19!!!PF08303.10&tRNA_lig_kinase ; tRNA ligase kinase domain&97.0&6.5E-07&1.3E-10&0.0&32&147-178&1-35!!!PF01583.19&APS_kinase ; Adenylylsulphate kinase&96.9&9.5E-07&1.9E-10&0.0&98&145-244&2-121!!!PF13189.5&Cytidylate_kin2 ; Cytidylate kinase-like family&96.8&1.5E-06&2.9E-10&0.0&30&147-176&1-32!!!PF13207.5&AAA_17 ; AAA domain&96.7&2.2E-06&4.3E-10&0.0&28&151-178&1-30!!!PF01121.19&CoaE ; Dephospho-CoA kinase&96.2&1.2E-05&2.3E-09&0.0&32&146-177&1-34!!!PF13521.5&AAA_28 ; AAA domain&95.8&4E-05&7.9E-09&0.0&25&147-171&1-27!!!PF02224.17&Cytidylate_kin ; Cytidylate kinase&95.8&4.2E-05&8.2E-09&0.0&30&148-177&1-32!!!PF00485.17&PRK ; Phosphoribulokinase / Uridine kinase family&95.1&0.00016&3.1E-08&0.0&20&147-166&1-20!!!PF04275.13&P-mevalo_kinase ; Phosphomevalonate kinase&94.7&0.00031&6E-08&0.0&26&150-175&1-31!!!PF13173.5&AAA_14 ; AAA domain&94.3&0.00053&1E-07&0.0&22&145-166&2-23!!!PF00910.21&RNA_helicase ; RNA helicase&94.1&0.00068&1.3E-07&0.0&19&148-166&1-19!!!PF07475.11&Hpr_kinase_C ; HPr Serine kinase C-terminal domain&94.0&0.00076&1.5E-07&0.0&33&144-176&13-46!!!PF03266.14&NTPase_1 ; NTPase&93.8&0.00087&1.7E-07&0.0&19&148-166&2-20!!!PF05729.11&NACHT ; NACHT domain&93.7&0.00094&1.9E-07&0.0&20&147-166&2-21!!!PF05272.10&VirE ; Virulence-associated protein E&93.7&0.00098&1.9E-07&0.0&25&142-166&56-80!!!PF06431.10&Polyoma_lg_T_C ; Polyomavirus large T antigen C-terminus&93.6&0.0011&2.1E-07&0.0&24&143-166&153-176!!!PF02702.16&KdpD ; Osmosensitive K+ channel His kinase sensor domain&93.6&0.0011&2.2E-07&0.0&23&144-166&3-25!!!PF03215.14&Rad17 ; Rad17 cell cycle checkpoint protein&93.3&0.0014&2.7E-07&0.0&23&144-166&44-66!!!PF10649.8&DUF2478 ; Protein of unknown function (DUF2478)&93.3&0.0014&2.8E-07&0.0&19&148-166&1-19!!!PF13401.5&AAA_22 ; AAA domain&93.2&0.0015&3E-07&0.0&23&144-166&4-26!!!PF00308.17&Bac_DnaA ; Bacterial dnaA  protein&93.1&0.0016&3.1E-07&0.0&22&145-166&33-54!!!PF05496.11&RuvB_N ; Holliday junction DNA helicase ruvB N-terminus&93.1&0.0017&3.3E-07&0.0&23&144-166&44-66!!!PF01637.17&ATPase_2 ; ATPase domain predominantly from Archaea&93.0&0.0017&3.3E-07&0.0&23&144-166&19-41!!!PF02283.15&CobU ; Cobinamide kinase / cobinamide phosphate guanyltransferase&93.0&0.0017&3.4E-07&0.0&19&148-166&1-19!!!PF00004.28&AAA ; ATPase family associated with various cellular activities (AAA)&93.0&0.0018&3.5E-07&0.0&19&148-166&1-19!!!PF02572.14&CobA_CobO_BtuR ; ATP:corrinoid adenosyltransferase BtuR/CobO/CobP&92.9&0.0018&3.6E-07&0.0&20&147-166&2-21!!!PF01443.17&Viral_helicase1 ; Viral (Superfamily 1) RNA helicase&92.9&0.002&3.8E-07&0.0&19&148-166&1-19!!!PF04851.14&ResIII ; Type III restriction enzyme, res subunit&92.8&0.002&3.9E-07&0.0&23&144-166&22-44!!!PF07728.13&AAA_5 ; AAA domain (dynein-related subfamily)&92.7&0.0022&4.4E-07&0.0&19&148-166&2-20!!!PF00265.17&TK ; Thymidine kinase&92.6&0.0023&4.5E-07&0.0&21&146-166&2-22!!!PF04665.11&Pox_A32 ; Poxvirus A32 protein&92.5&0.0025&4.8E-07&0.0&25&142-166&10-34!!!PF12780.6&AAA_8 ; P-loop containing dynein motor region D4&92.5&0.0025&4.8E-07&0.0&29&144-172&30-60!!!PF05707.11&Zot ; Zonular occludens toxin (Zot)&92.5&0.0025&4.9E-07&0.0&20&146-165&1-20!!!PF00158.25&Sigma54_activat ; Sigma-54 interaction domain&92.5&0.0025&5E-07&0.0&24&143-166&20-43!!!PF05621.10&TniB ; Bacterial TniB protein&92.5&0.0025&5E-07&0.0&21&146-166&39-59!!!PF00006.24&ATP-synt_ab ; ATP synthase alpha/beta family, nucleotide-binding domain&92.4&0.0027&5.2E-07&0.0&25&142-166&11-35!!!PF12774.6&AAA_6 ; Hydrolytic ATP binding site of dynein motor region D1&92.4&0.0027&5.3E-07&0.0&24&143-166&30-53!!!PF12775.6&AAA_7 ; P-loop containing dynein motor region D3&92.3&0.0028&5.5E-07&0.0&24&143-166&31-54!!!PF05673.12&DUF815 ; Protein of unknown function (DUF815)&92.3&0.0028&5.6E-07&0.0&23&144-166&53-75!!!PF17213.2&Hydin_ADK ; Hydin Adenylate kinase-like domain&92.3&0.003&5.7E-07&0.0&32&147-178&1-34!!!PF09820.8&AAA-ATPase_like ; Predicted AAA-ATPase&92.2&0.003&6E-07&0.0&22&145-166&31-52!!!PF14532.5&Sigma54_activ_2 ; Sigma-54 interaction domain&92.1&0.0032&6.3E-07&0.0&23&144-166&20-42!!!PF01695.16&IstB_IS21 ; IstB-like ATP binding protein&92.1&0.0033&6.4E-07&0.0&24&143-166&46-69!!!PF07693.13&KAP_NTPase ; KAP family P-loop domain&92.0&0.0033&6.5E-07&0.0&24&143-166&29-52!!!PF07726.10&AAA_3 ; ATPase family associated with various cellular activities (AAA)&92.0&0.0033&6.5E-07&0.0&19&148-166&2-20!!!PF00519.16&PPV_E1_C ; Papillomavirus helicase&92.0&0.0035&6.7E-07&0.0&25&142-166&259-283!!!PF09848.8&DUF2075 ; Uncharacterized conserved protein (DUF2075)&92.0&0.0035&6.7E-07&0.0&21&146-166&2-22!!!PF03969.15&AFG1_ATPase ; AFG1-like ATPase&91.9&0.0036&7E-07&0.0&24&143-166&65-88!!!PF01926.22&MMR_HSR1 ; 50S ribosome-binding GTPase&91.9&0.0036&7E-07&0.0&19&148-166&2-20!!!PF13191.5&AAA_16 ; AAA ATPase domain&91.9&0.0036&7.1E-07&0.0&22&145-166&24-45!!!PF02492.18&cobW ; CobW/HypB/UreG, nucleotide-binding domain&91.8&0.0037&7.2E-07&0.0&21&146-166&1-21!!!PF13479.5&AAA_24 ; AAA domain&91.8&0.0039&7.5E-07&0.0&22&145-166&2-23!!!PF14516.5&AAA_35 ; AAA-like domain&91.7&0.004&7.9E-07&0.0&23&144-166&29-51!!!PF13177.5&DNA_pol3_delta2 ; DNA polymerase III, delta subunit&91.6&0.0043&8.2E-07&0.0&22&145-166&19-40!!!PF02562.15&PhoH ; PhoH-like protein&91.4&0.0045&8.9E-07&0.0&23&144-166&18-40!!!PF00448.21&SRP54 ; SRP54-type protein, GTPase domain&91.3&0.0048&9.4E-07&0.0&21&146-166&2-22!!!PF01078.20&Mg_chelatase ; Magnesium chelatase, subunit ChlI&91.3&0.005&9.7E-07&0.0&23&144-166&21-43!!!PF00931.21&NB-ARC ; NB-ARC domain&91.2&0.005&9.8E-07&0.0&23&144-166&19-41!!!PF09439.9&SRPRB ; Signal recognition particle receptor beta subunit&91.2&0.005&9.8E-07&0.0&22&145-166&3-24!!!PF13481.5&AAA_25 ; AAA domain&91.2&0.0051&9.9E-07&0.0&22&145-166&28-49!!!PF06745.12&ATPase ; KaiC&91.2&0.0052&1E-06&0.0&26&141-166&15-40!!!PF03796.14&DnaB_C ; DnaB-like helicase C terminal domain&91.1&0.0052&1E-06&0.0&25&142-166&16-40!!!PF00493.22&MCM ; MCM2/3/5 family&90.9&0.0058&1.1E-06&0.0&24&143-166&55-78!!!PF07724.13&AAA_2 ; AAA domain (Cdc48 subfamily)&90.8&0.0062&1.2E-06&0.0&22&145-166&3-24!!!PF10443.8&RNA12 ; RNA12 protein&90.6&0.0066&1.3E-06&0.0&24&143-166&15-39!!!PF10662.8&PduV-EutP ; Ethanolamine utilisation - propanediol utilisation&90.6&0.0066&1.3E-06&0.0&21&146-166&2-22!!!PF13245.5&AAA_19 ; AAA domain&90.5&0.007&1.4E-06&0.0&23&144-166&10-32", "GO_hit": "GO:0009058 biosynthetic process !!!GO:0000155 phosphorelay sensor kinase activity !!!GO:0004672 protein kinase activity !!!GO:0004631 phosphomevalonate kinase activity !!!GO:0005525 GTP binding !!!GO:0004797 thymidine kinase activity !!!GO:0003723 RNA binding !!!GO:0004003 ATP-dependent DNA helicase activity !!!GO:0006109 regulation of carbohydrate metabolic process !!!GO:0006281 DNA repair !!!GO:0016301 kinase activity !!!GO:0008152 metabolic process !!!GO:0005524 ATP binding !!!GO:0009378 four-way junction helicase activity !!!GO:0016787 hydrolase activity !!!GO:0004127 cytidylate kinase activity !!!GO:0006260 DNA replication !!!GO:0003678 DNA helicase activity !!!GO:0003873 6-phosphofructo-2-kinase activity !!!GO:0098519 nucleotide phosphatase activity, acting on free nucleotides !!!GO:0004673 protein histidine kinase activity !!!GO:0003972 RNA ligase (ATP) activity !!!GO:0004161 dimethylallyltranstransferase activity !!!GO:0006695 cholesterol biosynthetic process !!!GO:0003677 DNA binding !!!GO:0006310 DNA recombination !!!GO:0008817 cob(I)yrinic acid a,c-diamide adenosyltransferase activity !!!GO:0043752 adenosylcobinamide kinase activity !!!GO:0015937 coenzyme A biosynthetic process !!!GO:0005737 cytoplasm !!!GO:0006355 regulation of transcription, DNA-templated !!!GO:0006000 fructose metabolic process !!!GO:0000166 nucleotide binding !!!GO:0016740 transferase activity !!!GO:0006614 SRP-dependent cotranslational protein targeting to membrane !!!GO:0006576 cellular biogenic amine metabolic process !!!GO:0043531 ADP binding !!!GO:0000160 phosphorelay signal transduction system !!!GO:0008134 transcription factor binding !!!GO:0006388 tRNA splicing, via endonucleolytic cleavage and ligation !!!GO:0009236 cobalamin biosynthetic process !!!GO:0004140 dephospho-CoA kinase activity !!!GO:0006270 DNA replication initiation !!!GO:0016887 ATPase activity !!!GO:0051188 cofactor biosynthetic process !!!GO:0006139 nucleobase-containing compound metabolic process !!!GO:0016020 membrane !!!GO:0003724 RNA helicase activity", "KO_hit": "unknown function", "trna_type": ""}, {"start": 1692, "end": 2622, "strand": 1, "label": "lipoprotein", "category": "other", "color": "#838383", "phrog": "phrog_200", "score": "181.3", "eval": "4.3e-55", "hostDomain": "Bacteria:525;Archaea:6", "Avg_#AA": "483.0", "#ColMSA": "714.0", "#prot": "531", "RefSeq": "hypothetical protein [n=161]; band-7-like membrane protein [n=17]; membrane protein [n=16]; band 7 protein [n=13]; protein of an unannotated phage [n=9]; band-7 like membrane protein [n=7]; serine protease [n=7]; SPFH domain-containing protein [n=5]; band7-like membrane protein [n=5]; band 7 lipoprotein [n=5]; HflC/HflK family inner membrane lipoprotein [n=4]; anti-proliferative protein [n=4]; MbpS [n=4]; membrane protein MbpS [n=3]; band-7 protein [n=3]; SPFH domain / Band 7 family [n=3]; band-7 [n=3]; transposase [n=3]; SPFH domain protein [n=2]; structural protein [n=2]; SPFH domain-containing protein/band 7 family protein [n=2]; SPFH domain / Band 7 family protein [n=2]; SPFH domain / band 7 family protein [n=2]; SPFH domain/band 7 family protein [n=2]; transmembrane protein [n=2]; Band 7 protein [n=2]; HflC/HflK family inner membrane protein [n=2]; band 7-like protein [n=2]; transposase fusion protein [n=2]; DNA polymerase I [n=2]; ion transporter [n=1]; SPFH domain band 7 family protein [n=1]; SPFH domain / band 7 protein [n=1]; Ala-Val- rich protein [n=1]; membrane protein, stomatin/prohibitin domain [n=1]; SPFH domain containing protein [n=1]; lipoprotein [n=1]; prohibitin [n=1]; hypothetical conserved protein COG330 [n=1]; protease [n=1]; band 7 [n=1]; conserved SPFH domain-containing protein [n=1]; SPFH protein domain [n=1]; gp36, bacteriophage/transposase fusion protein [n=1]; Band_7 superfamily protein [n=1]; band-7-protein [n=1]; SPFH/band 7/PHB domain protein [n=1]; stomatin/prohibitin superfamily protein [n=1]; membrane protein band-7-like protein [n=1]; conserved uncharacterised protein [n=1];", "Pfam_hit": "PF01145.24&Band_7 ; SPFH domain / Band 7 family&99.3&1.6E-16&3.2E-20&0.0&162&102-276&1-167!!!PF13421.5&Band_7_1 ; SPFH domain-Band 7 family&99.2&5.9E-16&1.1E-19&0.0&171&96-274&11-209!!!PF11978.7&MVP_shoulder ; Shoulder domain&96.6&2.6E-06&4.9E-10&0.0&93&157-261&7-117!!!PF00665.25&rve ; Integrase core domain&93.7&0.00094&1.9E-07&0.0&50&376-425&72-133!!!PF13610.5&DDE_Tnp_IS240 ; DDE domain&93.7&0.00094&1.9E-07&0.0&79&374-454&57-135", "GO_hit": "GO:0015074 DNA integration", "KO_hit": "K04088&hflK&membrane protease subunit HflK [EC:3.4.-.-]&&336&1!!!K04087&hflC&membrane protease subunit HflC [EC:3.4.-.-]&&327&1", "trna_type": ""}, {"start": 2637, "end": 3030, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "22.24", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 3026, "end": 3488, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "65.82", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 3494, "end": 3824, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "16.77", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 3820, "end": 4126, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "47.27", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 4122, "end": 4425, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "37.07", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 4418, "end": 5504, "strand": 1, "label": "thymidylate synthase", "category": "DNA, RNA and nucleotide metabolism", "color": "#ffdf59", "phrog": "phrog_85", "score": "130.4", "eval": "1.2e-39", "hostDomain": "Bacteria:983;Archaea:15", "Avg_#AA": "844.0", "#ColMSA": "1606.0", "#prot": "998", "RefSeq": "thymidylate synthase [n=504]; thymidylate synthetase [n=94]; ThyX [n=86]; hypothetical protein [n=55]; flavin-dependent thymidylate synthase [n=44]; protein of an unannotated phage [n=21]; FAD-dependent thymidylate synthase [n=16]; ThyX-like protein [n=16]; ThyX-like thymidylate synthase [n=16]; Td thymidylate synthetase [n=15]; thymidilate synthase [n=13]; thymidylate synthase ThyX [n=9]; thymidylate synthase complementing protein [n=7]; ThyX-like [n=5]; thymidylate synthase thyX [n=4]; predicted alternative thymidylate synthase [n=3]; RP thymidylate synthase [n=3]; HTH DNA binding domain protein [n=2]; Td Td thymidylate synthetase [n=2]; alternative thymidylate synthase [n=2]; FAD-dependent thymidylate synthetase [n=2]; thymidylate synthase-like protein [n=2]; thymidylate synthase protein [n=2]; thymidylate synthase thyX/thy1 [n=2]; Thymidilate synthase [n=2]; FAD dependent thymidylate synthase [n=1]; thymidylate synthase [Escherichia phage vB_EcoM_FFH2] [n=1]; Thy1 [n=1]; Thymidylate synthetase [n=1]; thymidylate synthathase [n=1]; alternative thymidylate synthase-like protein [n=1]; phage C31 protein gp16-like protein [n=1]; similar to phage C31 gp16 [n=1]; ThyX protein [n=1]; thymidilate synthase protein [n=1]; ThyX-like domain protein [n=1]; Thy1, thymidylate synthase complementing protein [n=1]; flavin-dependentthymidylate synthase [n=1]; thimidilate synthase [n=1]; thyimdylate synthase [n=1];", "Pfam_hit": "PF02511.14&Thy1 ; Thymidylate synthase complementing protein&99.7&6.2E-23&1.3E-26&0.0&184&363-566&1-191!!!PF05203.15&Hom_end_hint ; Hom_end-associated Hint&98.7&8.4E-13&1.8E-16&0.0&79&274-353&312-390!!!PF14890.5&Intein_splicing ; Intein splicing domain&98.2&1.5E-10&3.1E-14&0.0&214&122-350&52-277!!!PF03161.12&LAGLIDADG_2 ; LAGLIDADG DNA endonuclease family&96.3&7.8E-06&1.6E-09&0.0&66&284-353&90-157!!!PF05204.13&Hom_end ; Homing endonuclease&95.7&4.8E-05&1E-08&0.0&63&289-352&2-64!!!PF01079.19&Hint ; Hint module&94.0&0.0007&1.5E-07&0.0&79&85-163&8-90!!!PF13403.5&Hint_2 ; Hint domain&92.0&0.0031&6.5E-07&0.0&71&88-162&1-87!!!PF08517.11&AXH ; Ataxin-1 and HBP1 module (AXH)&90.8&0.0056&1.2E-06&0.0&71&91-161&2-81", "GO_hit": "GO:0008233 peptidase activity !!!GO:0030908 protein splicing !!!GO:0004519 endonuclease activity !!!GO:0003723 RNA binding !!!GO:0006508 proteolysis !!!GO:0003677 DNA binding !!!GO:0050660 flavin adenine dinucleotide binding !!!GO:0050797 thymidylate synthase (FAD) activity !!!GO:0005515 protein binding !!!GO:0006231 dTMP biosynthetic process", "KO_hit": "K03465&E2.1.1.148, thyX, thy1&thymidylate synthase (FAD) [EC:2.1.1.148]&ko00240 Pyrimidine metabolism;;;ko00670 One carbon pool by folate&425&829", "trna_type": ""}, {"start": 5496, "end": 6153, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "64.75", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 6197, "end": 6812, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "45.90", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 6857, "end": 6956, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "7.80", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 6963, "end": 8070, "strand": 1, "label": "dUTPase", "category": "DNA, RNA and nucleotide metabolism", "color": "#ffdf59", "phrog": "phrog_135", "score": "179.1", "eval": "3e-54", "hostDomain": "Bacteria:694;unknown:1", "Avg_#AA": "532.0", "#ColMSA": "1093.0", "#prot": "695", "RefSeq": "deoxyuridine 5'-triphosphate nucleotidohydrolase [n=128]; dUTPase [n=83]; dUTP pyrophosphatase [n=28]; hypothetical protein [n=28]; deoxyuridine triphosphatase [n=22]; protein of an unannotated phage [n=20]; deoxyUTP pyrophosphatase [n=20]; dUTP nucleotidohydrolase [n=19]; dUTP nucleotidylhydrolase [n=13]; deoxyuridine triphosphate nucleotidohydrolase [n=3]; dUTP diphosphatase [n=3]; deoxyuridine 5'-triphosphatenucleotidohydrolase [n=3]; deoxyuridine 5-triphosphate nucleotidohydrolase [n=2]; deoxyuridine 5'-triphosphate nucleotidylhydrolase [n=2]; trimeric dUTP diphosphatase [n=2]; deoxyUTP protein [n=2]; nucleotidohydrolase [n=1]; phi PVL ORF 53 analogue [n=1]; dUTPase, [n=1]; dUTPase, deoxyuridine 5'-triphosphate nucleotidohydrolase [n=1]; DUTP diphosphatase Dut [n=1]; DUTP diphosphatase [n=1]; Dut dUTPase (with intron insertion) [n=1]; hydrolase [n=1]; triphosphate nucleotidohydrolase [n=1]; deoxyuridine 5'-triphosphate nucleotidohydrolase protein [n=1]; deoxyuridine 5'-triphosphate nucleotidhydrolase [n=1]; phi PVL ORF 53 homologue [n=1]; deoxyuridine 5'-triphosphate nucleotidohydrolase, DUTP [n=1]; SaPIbov1 derepressor [n=1]; aminotransferase [n=1]; Deoxyuridine 5'-triphosphate nucleotidohydrolase [n=1]; 2-deoxyuridine 5-triphosphate nucleotidohydrolase [n=1]; deoxyuridine 5'-triphosphate nucleotidohydrolase FS [n=1]; hypothetical phage protein (possible dUTP pyrophosphatase) [n=1]; deoxyuridine 5'-triphosphate nucleotide hydrolase [n=1]; deoxyuridine 5'-triphosphate nucleotidohydrolase-like protein [n=1]; dUTP nucleotihydrolase [n=1]; dUTPase and deoxyuridine 5' triphosphate nucleotidohydrolase [n=1]; phage dUTP pyrophosphatase [n=1]; possible dUTPase/dTTPase [n=1]; deoxyuridine 5-triphosphate nucleotidohydrolase Dut [n=1];", "Pfam_hit": "PF00692.18&dUTPase ; dUTPase&99.6&3.1E-20&7.7E-24&0.0&127&141-275&2-128!!!PF06559.10&DCD ; 2'-deoxycytidine 5'-triphosphate deaminase (DCD)&98.5&6.6E-12&1.5E-15&0.0&107&163-283&243-358!!!PF06559.10&DCD ; 2'-deoxycytidine 5'-triphosphate deaminase (DCD)&98.3&7.2E-11&1.7E-14&0.0&84&163-250&76-165!!!PF04797.12&Herpes_ORF11 ; Herpesvirus dUTPase protein&97.8&3.3E-09&7.9E-13&0.0&88&149-247&249-338!!!PF05784.10&Herpes_UL82_83 ; Betaherpesvirus UL82/83 protein N terminus&97.3&9.6E-08&2.3E-11&0.0&93&143-248&239-331", "GO_hit": "GO:0009394 2'-deoxyribonucleotide metabolic process !!!GO:0009405 pathogenesis !!!GO:0008829 dCTP deaminase activity", "KO_hit": "K01520&dut, DUT&dUTP pyrophosphatase [EC:3.6.1.23]&ko00240 Pyrimidine metabolism&485&685", "trna_type": ""}, {"start": 8085, "end": 9087, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "122.50", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 9188, "end": 11132, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "116.75", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 11166, "end": 12729, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "125.10", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 12869, "end": 13382, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "93.44", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 13378, "end": 13738, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "57.35", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 13734, "end": 15858, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "265.07", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 15862, "end": 16759, "strand": 1, "label": "transglycosylase", "category": "other", "color": "#838383", "phrog": "phrog_12661", "score": "127.7", "eval": "6.1e-39", "hostDomain": "Bacteria:8", "Avg_#AA": "186.0", "#ColMSA": "202.0", "#prot": "8", "RefSeq": "hydrolase [n=8];", "Pfam_hit": "PF06737.13&Transglycosylas ; Transglycosylase-like domain&96.5&4.2E-06&8.8E-10&0.0&61&109-170&4-66!!!PF00062.19&Lys ; C-type lysozyme/alpha-lactalbumin family&96.1&1.7E-05&3.5E-09&0.0&63&106-168&21-98!!!PF06871.10&TraH_2 ; TraH_2&95.4&9.3E-05&1.9E-08&0.0&79&106-184&15-140!!!PF13406.5&SLT_2 ; Transglycosylase SLT domain&94.6&0.00033&6.6E-08&0.0&61&107-168&87-198!!!PF01464.19&SLT ; Transglycosylase SLT domain&94.4&0.0004&8.5E-08&0.0&62&108-169&14-84", "GO_hit": "unknown function", "KO_hit": "unknown function", "trna_type": ""}, {"start": 16771, "end": 17533, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "109.65", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 17541, "end": 20088, "strand": 1, "label": "virion structural protein", "category": "head and packaging", "color": "#3e83f6", "phrog": "phrog_2810", "score": "167.7", "eval": "5.5e-51", "hostDomain": "Bacteria:51", "Avg_#AA": "961.0", "#ColMSA": "1083.0", "#prot": "51", "RefSeq": "minor tail protein [n=29]; hypothetical protein [n=10]; P60 lipoprotein [n=4]; protein of an unannotated phage [n=2]; baseplate protein [n=1]; minor tail protein, structural [n=1]; peptidase [n=1]; NLP/P60-family domain protein [n=1]; NLP/P60-family domain [n=1]; minor tail subunit [n=1];", "Pfam_hit": "PF06940.10&DUF1287 ; Domain of unknown function (DUF1287)&96.2&1.1E-05&2.3E-09&0.0&74&517-598&59-144!!!PF05382.12&Amidase_5 ; Bacteriophage peptidoglycan hydrolase&95.4&7.5E-05&1.8E-08&0.0&88&511-598&3-111!!!PF12671.6&Amidase_6 ; Putative amidase domain&95.0&0.00016&3.7E-08&0.0&81&511-591&4-120!!!PF00877.18&NLPC_P60 ; NlpC/P60 family&94.9&0.00019&4.5E-08&0.0&72&523-597&2-79!!!PF06672.10&DUF1175 ; Protein of unknown function (DUF1175)&94.7&0.0003&6.3E-08&0.0&36&509-547&31-67", "GO_hit": "unknown function", "KO_hit": "unknown function", "trna_type": ""}, {"start": 20142, "end": 20718, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "52.21", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 20714, "end": 21284, "strand": 1, "label": "unknown function", "category": "unknown function", "color": "#c9c9c9", "phrog": "phrog_2774", "score": "61.7", "eval": "6.6e-19", "hostDomain": "Bacteria:51", "Avg_#AA": "1180.0", "#ColMSA": "1802.0", "#prot": "51", "RefSeq": "hypothetical protein [n=41]; tape measure [n=4]; LysM domain [n=3]; protein of an unannotated phage [n=2]; prohead protease [n=1];", "Pfam_hit": "PF04586.16&Peptidase_S78 ; Caudovirus prohead serine protease&97.3&7.1E-08&1.6E-11&0.0&137&46-219&9-154!!!PF06080.11&DUF938 ; Protein of unknown function (DUF938)&96.9&6.9E-07&1.8E-10&0.0&132&427-561&27-194!!!PF13489.5&Methyltransf_23 ; Methyltransferase domain&96.9&7.6E-07&1.9E-10&0.0&124&426-556&20-186!!!PF05219.11&DREV ; DREV methyltransferase&96.5&2.9E-06&7.1E-10&0.0&131&427-562&90-240!!!PF12147.7&Methyltransf_20 ; Putative methyltransferase&96.5&3.5E-06&8.6E-10&0.0&130&426-560&130-293!!!PF05891.11&Methyltransf_PK ; AdoMet dependent proline di-methyltransferase&96.4&4.4E-06&1.1E-09&0.0&120&427-560&55-198!!!PF00891.17&Methyltransf_2 ; O-methyltransferase&96.4&4.8E-06&1.2E-09&0.0&128&427-557&75-227!!!PF02390.16&Methyltransf_4 ; Putative methyltransferase&96.4&4.7E-06&1.2E-09&0.0&126&428-556&2-180!!!PF07021.11&MetW ; Methionine biosynthesis protein MetW&96.3&5.9E-06&1.5E-09&0.0&129&426-562&12-169!!!PF08003.10&Methyltransf_9 ; Protein of unknown function (DUF1698)&96.3&6.7E-06&1.6E-09&0.0&129&427-562&116-271!!!PF05401.10&NodS ; Nodulation protein S (NodS)&96.3&6.7E-06&1.7E-09&0.0&116&426-560&42-181!!!PF01209.17&Ubie_methyltran ; ubiE/COQ5 methyltransferase family&96.3&6.9E-06&1.7E-09&0.0&129&429-562&58-241!!!PF02353.19&CMAS ; Mycolic acid cyclopropane synthetase&96.2&8.9E-06&2.2E-09&0.0&127&427-561&61-208!!!PF05724.10&TPMT ; Thiopurine S-methyltransferase (TPMT)&96.1&1.2E-05&2.9E-09&0.0&118&426-561&37-198!!!PF01234.16&NNMT_PNMT_TEMT ; NNMT/PNMT/TEMT family&96.1&1.2E-05&3E-09&0.0&82&468-559&155-238!!!PF05175.13&MTS ; Methyltransferase small domain&96.1&1.3E-05&3.2E-09&0.0&109&427-555&31-167!!!PF07942.11&N2227 ; N2227-like protein&96.1&1.5E-05&3.5E-09&0.0&78&469-560&164-241!!!PF11968.7&Bmt2 ; 25S rRNA (adenine(2142)-N(1))-methyltransferase, Bmt2&96.0&1.7E-05&3.9E-09&0.0&115&426-561&51-186!!!PF10017.8&Methyltransf_33 ; Histidine-specific methyltransferase, SAM-dependent&95.9&2.1E-05&5.1E-09&0.0&82&427-511&62-177!!!PF03291.15&Pox_MCEL ; mRNA capping enzyme&95.9&2.5E-05&6.1E-09&0.0&131&427-560&59-257!!!PF03269.13&DUF268 ; Caenorhabditis protein of unknown function, DUF268&95.8&2.9E-05&7E-09&0.0&113&429-560&2-145!!!PF03492.14&Methyltransf_7 ; SAM dependent carboxyl methyltransferase&95.8&3.6E-05&8.2E-09&0.0&95&468-562&107-252!!!PF07091.10&FmrO ; Ribosomal RNA methyltransferase (FmrO)&95.4&6.7E-05&1.6E-08&0.0&115&425-558&100-240!!!PF04672.11&Methyltransf_19 ; S-adenosyl methyltransferase&95.4&7.3E-05&1.8E-08&0.0&127&427-560&69-235!!!PF13847.5&Methyltransf_31 ; Methyltransferase domain&95.2&9.6E-05&2.5E-08&0.0&83&427-512&3-121!!!PF03848.13&TehB ; Tellurite resistance protein TehB&95.2&0.0001&2.5E-08&0.0&83&427-512&30-137!!!PF01269.16&Fibrillarin ; Fibrillarin&95.2&0.00011&2.7E-08&0.0&113&426-561&71-213!!!PF05148.14&Methyltransf_8 ; Hypothetical methyltransferase&95.2&0.00012&2.9E-08&0.0&106&426-560&71-186!!!PF05971.11&Methyltransf_10 ; Protein of unknown function (DUF890)&95.1&0.00013&3.1E-08&0.0&126&427-560&103-292!!!PF03141.15&Methyltransf_29 ; Putative S-adenosyl-L-methionine-dependent methyltransferase&95.0&0.00016&3.8E-08&0.0&85&427-512&113-218!!!PF06325.12&PrmA ; Ribosomal protein L11 methyltransferase (PrmA)&94.9&0.00019&4.4E-08&0.0&99&427-558&172-296!!!PF12847.6&Methyltransf_18 ; Methyltransferase domain&94.5&0.00032&8.3E-08&0.0&77&426-509&13-117!!!PF08123.12&DOT1 ; Histone methylation protein DOT1&94.4&0.00033&8.4E-08&0.0&107&426-557&41-188!!!PF03141.15&Methyltransf_29 ; Putative S-adenosyl-L-methionine-dependent methyltransferase&94.4&0.00037&8.7E-08&0.0&83&427-512&354-465!!!PF01739.17&CheR ; CheR methyltransferase, SAM binding domain&94.4&0.00038&9.4E-08&0.0&44&469-512&134-177!!!PF14550.5&Peptidase_S78_2 ; Putative phage serine protease XkdF&94.2&0.00052&1.2E-07&0.0&100&47-150&10-121!!!PF03602.14&Cons_hypoth95 ; Conserved hypothetical protein 95&94.1&0.00049&1.2E-07&0.0&82&426-512&36-144!!!PF09243.9&Rsm22 ; Mitochondrial small ribosomal subunit Rsm22&94.1&0.00052&1.2E-07&0.0&72&427-501&34-134!!!PF05185.15&PRMT5 ; PRMT5 arginine-N-methyltransferase&93.4&0.00096&2.4E-07&0.0&77&427-506&59-170!!!PF12692.6&Methyltransf_17 ; S-adenosyl-L-methionine methyltransferase&93.2&0.0012&3E-07&0.0&84&427-513&28-136!!!PF01564.16&Spermine_synth ; Spermine/spermidine synthase domain&93.2&0.0012&3E-07&0.0&82&427-511&18-134!!!PF06859.11&Bin3 ; Bicoid-interacting protein 3 (Bin3)&93.1&0.0013&3.2E-07&0.0&88&471-561&1-94!!!PF10294.8&Methyltransf_16 ; Lysine methyltransferase&92.5&0.0019&4.8E-07&0.0&80&427-512&45-157!!!PF04378.12&RsmJ ; Ribosomal RNA large subunit methyltransferase D, RlmJ&91.7&0.0032&7.7E-07&0.0&81&427-512&60-170!!!PF08242.11&Methyltransf_12 ; Methyltransferase domain&91.6&0.0031&8E-07&0.0&69&432-505&1-101!!!PF08241.11&Methyltransf_11 ; Methyltransferase domain&91.4&0.0035&9.2E-07&0.0&71&432-507&1-96!!!PF01861.15&DUF43 ; Protein of unknown function DUF43&91.3&0.0038&9.3E-07&0.0&78&427-511&43-149!!!PF13679.5&Methyltransf_32 ; Methyltransferase domain&91.2&0.0039&1E-06&0.0&77&426-512&24-137!!!PF02005.15&TRM ; N2,N2-dimethylguanosine tRNA methyltransferase&91.1&0.0045&1E-06&0.0&81&424-513&97-211!!!PF11599.7&AviRa ; RRNA methyltransferase AviRa&91.0&0.0046&1.1E-06&0.0&44&469-512&157-205!!!PF02527.14&GidB ; rRNA small subunit methyltransferase G&90.8&0.0049&1.2E-06&0.0&74&430-512&54-152!!!PF03686.12&UPF0146 ; Uncharacterised protein family (UPF0146)&90.1&0.0064&1.6E-06&0.0&79&426-514&13-105", "GO_hit": "GO:0003723 RNA binding !!!GO:0006412 translation !!!GO:0008171 O-methyltransferase activity !!!GO:0005737 cytoplasm !!!GO:0008168 methyltransferase activity !!!GO:0008152 metabolic process !!!GO:0006480 N-terminal protein amino acid methylation !!!GO:0005730 nucleolus !!!GO:0006364 rRNA processing !!!GO:0008033 tRNA processing !!!GO:0008757 S-adenosylmethionine-dependent methyltransferase activity !!!GO:0009877 nodulation !!!GO:0004809 tRNA (guanine-N2-)-methyltransferase activity !!!GO:0018024 histone-lysine N-methyltransferase activity !!!GO:0009312 oligosaccharide biosynthetic process !!!GO:0070475 rRNA base methylation !!!GO:0008649 rRNA methyltransferase activity", "KO_hit": "unknown function", "trna_type": ""}, {"start": 21284, "end": 21692, "strand": 1, "label": "baseplate protein", "category": "tail", "color": "#07e9a2", "phrog": "phrog_2669", "score": "65.0", "eval": "1.1e-19", "hostDomain": "Bacteria:53", "Avg_#AA": "141.0", "#ColMSA": "147.0", "#prot": "53", "RefSeq": "hypothetical protein [n=30]; baseplate wedge protein [n=5]; tail lysozyme [n=4]; tail lysozyme/baseplate [n=3]; protein of an unannotated phage [n=2]; baseplate J [n=2]; lysozyme [n=2]; phage baseplate assembly protein W [n=1]; baseplate assembly protein [n=1]; minor tail protein [n=1]; baseplate J / tail lysozyme [n=1];", "Pfam_hit": "PF04965.13&GPW_gp25 ; Gene 25-like lysozyme&99.4&2.8E-17&5.4E-21&0.0&87&24-121&2-88!!!PF10934.7&DUF2634 ; Protein of unknown function (DUF2634)&99.3&3.6E-17&7E-21&0.0&92&4-106&1-98!!!PF07409.11&GP46 ; Phage protein GP46&97.2&1.8E-07&3.5E-11&0.0&52&29-80&2-72", "GO_hit": "unknown function", "KO_hit": "unknown function", "trna_type": ""}, {"start": 21688, "end": 22423, "strand": 1, "label": "unknown function", "category": "unknown function", "color": "#c9c9c9", "phrog": "phrog_2806", "score": "75.8", "eval": "4.7e-23", "hostDomain": "Bacteria:51", "Avg_#AA": "198.0", "#ColMSA": "203.0", "#prot": "51", "RefSeq": "hypothetical protein [n=48]; protein of an unannotated phage [n=2]; structural protein [n=1];", "Pfam_hit": "unknown function", "GO_hit": "unknown function", "KO_hit": "unknown function", "trna_type": ""}, {"start": 22446, "end": 23583, "strand": 1, "label": "endolysin", "category": "lysis", "color": "#f35f49", "phrog": "phrog_291", "score": "329.5", "eval": "5e-100", "hostDomain": "Bacteria:424", "Avg_#AA": "545.0", "#ColMSA": "1118.0", "#prot": "424", "RefSeq": "endolysin [n=50]; lysin [n=46]; lysin A [n=8]; N-acetylmuramoyl-L-alanine amidase [n=6]; hypothetical protein [n=5]; protein of an unannotated phage [n=4]; glycosylhydrolase [n=3]; muramidase [n=2]; lysin protein [n=2]; muramidase lysin [n=2]; lysozyme [n=1]; PlyB [n=1]; lysin, experimental [n=1]; peptidase domain protein [n=1]; dextranase 1 [n=1]; LysB [n=1]; autolytic lysozyme [n=1]; glycoside hydrolase [n=1]; Phage lysin [n=1]; 1,4-beta-N-acetylmuramidase [n=1]; endolysin type Endo-N-acetylmuramidase [n=1]; lyzozyme M1 [n=1]; glycosyl hydrolase family 25 protein [n=1]; glycosylhydrlase LysM domain protein [n=1]; chlorophenol reductase precursor [n=1];", "Pfam_hit": "PF08924.10&DUF1906 ; Domain of unknown function (DUF1906)&99.6&3.7E-20&7.2E-24&0.0&112&137-248&4-133!!!PF01183.19&Glyco_hydro_25 ; Glycosyl hydrolases family 25&97.9&2.1E-09&4.3E-13&0.0&168&128-305&1-177", "GO_hit": "GO:0016998 cell wall macromolecule catabolic process !!!GO:0003796 lysozyme activity !!!GO:0009253 peptidoglycan catabolic process", "KO_hit": "K07273&acm&lysozyme&&709&24!!!K01185&E3.2.1.17&lysozyme [EC:3.2.1.17]&&507&4", "trna_type": ""}, {"start": 23598, "end": 23880, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "8.01", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 24005, "end": 25385, "strand": 1, "label": "virion structural protein", "category": "head and packaging", "color": "#3e83f6", "phrog": "phrog_2813", "score": "254.9", "eval": "1.9e-77", "hostDomain": "Bacteria:51", "Avg_#AA": "456.0", "#ColMSA": "480.0", "#prot": "51", "RefSeq": "hypothetical protein [n=46]; protein of an unannotated phage [n=2]; baseplate I protein [n=2]; minor tail subunit [n=1];", "Pfam_hit": "unknown function", "GO_hit": "unknown function", "KO_hit": "unknown function", "trna_type": ""}, {"start": 25401, "end": 27630, "strand": 1, "label": "baseplate wedge subunit", "category": "tail", "color": "#07e9a2", "phrog": "phrog_6", "score": "211.5", "eval": "3e-64", "hostDomain": "Bacteria:3188;Archaea:14", "Avg_#AA": "559.0", "#ColMSA": "1677.0", "#prot": "3202", "RefSeq": "hypothetical protein [n=146]; baseplate J-like protein [n=63]; baseplate assembly protein [n=57]; baseplate J protein [n=51]; baseplate protein [n=40]; protein of an unannotated phage [n=37]; baseplate component [n=37]; baseplate J family protein [n=29]; baseplate J [n=23]; tail protein [n=23]; baseplate assembly protein J [n=16]; baseplate [n=14]; BmpB [n=7]; baseplate j protein [n=6]; structural protein [n=5]; XkdT protein [n=5]; baseplate-J protein [n=4]; baseplate morphogenetic protein [n=4]; baseplate P2 J-like protein [n=4]; baseplate-related protein [n=3]; base plate J protein [n=3]; baseplate assembly protein (J) [n=3]; P2 gpJ-like protein [n=3]; baseplate related protein [n=2]; strucutual protein [n=2]; base plate related protein [n=2]; baseplate protein I [n=2]; XkdT [n=2]; phage conserved protein [n=2]; structural baseplate J-like protein [n=2]; baseplate morphogenetic protein B [n=1]; baseplate protein 1 [n=1]; bacteriophage protein [n=1]; Cro/CI family transcriptional regulator [n=1]; baseplate assembly J-like protein [n=1]; gp34, phage baseplate assembly protein [n=1]; baseplate J-like, structural [n=1]; basplate assembly protein [n=1]; gp61 baseplate protein [n=1]; phage baseplate assembly protein gpJ [n=1]; gp37, bacteriophage baseplate assembly protein J [n=1]; baseplate wedge protein [n=1]; baseplate J family-like protein [n=1]; virion structural protein [n=1]; gp24, conserved hypothetical protein [n=1]; Baseplate J-like protein [n=1]; baseplate assembly [n=1]; phage baseplate assembly protein J [n=1]; baseplate J-like family protein [n=1]; baseplate J-like assembly protein [n=1]; baseplate J family protein gp47 [n=1]; mail baseplate wedge protein [n=1]; P2baseplate assembly protein [n=1]; phage tail protein [n=1]; baseplate J superfamily protein [n=1]; MuW-like tail protein [n=1]; baseplate morphogenesis protein [n=1]; baseplate J tail protein [n=1]; phage Mu-protein [n=1]; element PBSX protein [n=1]; virion protein [n=1]; Phage conserved protein [n=1]; baseplate wedge [n=1]; baseplate j family protein [n=1]; similar to plu3384, similar to Mu gp47 [n=1]; J baseplate assembly protein [n=1]; similar to P2 J [n=1]; baseplate or tail fiber protein [n=1]; baseplate J like protein [n=1]; bacteriophage baseplate assembly protein J [n=1];", "Pfam_hit": "PF04865.13&Baseplate_J ; Baseplate J-like protein&99.5&2.6E-19&5.5E-23&0.0&235&130-375&1-249!!!PF03434.12&DUF276 ; DUF276&98.0&9.5E-10&2E-13&0.0&190&174-378&8-233!!!PF11041.7&DUF2612 ; Protein of unknown function (DUF2612)&95.9&2.6E-05&5.4E-09&0.0&132&93-280&9-142", "GO_hit": "unknown function", "KO_hit": "unknown function", "trna_type": ""}, {"start": 27724, "end": 28243, "strand": 1, "label": "virion structural protein", "category": "head and packaging", "color": "#3e83f6", "phrog": "phrog_2756", "score": "53.3", "eval": "3.4e-16", "hostDomain": "Bacteria:51", "Avg_#AA": "156.0", "#ColMSA": "158.0", "#prot": "51", "RefSeq": "hypothetical protein [n=41]; structural protein [n=6]; protein of an unannotated phage [n=2]; tail tube protein [n=1]; structural [n=1];", "Pfam_hit": "unknown function", "GO_hit": "unknown function", "KO_hit": "unknown function", "trna_type": ""}, {"start": 28277, "end": 29627, "strand": 1, "label": "tail sheath", "category": "tail", "color": "#07e9a2", "phrog": "phrog_2839", "score": "140.2", "eval": "1.1e-42", "hostDomain": "Bacteria:51", "Avg_#AA": "582.0", "#ColMSA": "583.0", "#prot": "51", "RefSeq": "hypothetical protein [n=25]; tail sheath protein [n=13]; tail sheath [n=5]; protein of an unannotated phage [n=2]; structural protein [n=2]; tail protein [n=1]; phage tail sheath, structural [n=1]; beta-helix repeat protein [n=1]; phage tail sheath protein [n=1];", "Pfam_hit": "PF17541.1&DUF5458 ; Family of unknown function (DUF5458)&99.9&1.9E-30&3.7E-34&0.0&286&267-569&101-419!!!PF10758.8&DUF2586 ; Protein of unknown function (DUF2586)&99.8&1.5E-24&2.9E-28&0.0&305&227-566&23-365!!!PF17482.1&Phage_sheath_1C ; Phage tail sheath C-terminal domain&97.5&2.6E-08&5E-12&0.0&94&471-565&3-101!!!PF04984.13&Phage_sheath_1 ; Phage tail sheath protein subtilisin-like domain&97.4&5.2E-08&1E-11&0.0&130&299-464&6-137!!!PF11863.7&DUF3383 ; Protein of unknown function (DUF3383)&96.6&3.3E-06&6.3E-10&0.0&140&416-563&313-482", "GO_hit": "unknown function", "KO_hit": "unknown function", "trna_type": ""}, {"start": 29680, "end": 30295, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "79.23", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 30263, "end": 30704, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "38.48", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 30707, "end": 31130, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "60.75", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 31126, "end": 34072, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "235.89", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 34166, "end": 35501, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "176.30", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 35546, "end": 36074, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "95.25", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 36097, "end": 37051, "strand": 1, "label": "major head protein", "category": "head and packaging", "color": "#3e83f6", "phrog": "phrog_2522", "score": "177.8", "eval": "4.1e-54", "hostDomain": "Bacteria:58", "Avg_#AA": "360.0", "#ColMSA": "394.0", "#prot": "58", "RefSeq": "major capsid protein [n=29]; hypothetical protein [n=21]; major capsid [n=3]; protein of an unannotated phage [n=2]; glycosyl transferase [n=1]; major capsid subunit [n=1];", "Pfam_hit": "PF06673.10&L_lactis_ph-MCP ; Lactococcus lactis bacteriophage major capsid protein&99.6&2.9E-21&5E-25&0.0&255&93-359&77-346!!!PF05065.12&Phage_capsid ; Phage capsid family&99.5&1.4E-19&2.4E-23&0.0&253&96-356&1-274!!!PF05125.11&Phage_cap_P2 ; Phage major capsid protein, P2 family&99.4&1.7E-17&3E-21&0.0&256&94-356&22-326!!!PF11651.7&P22_CoatProtein ; P22 coat protein - gene protein 5&97.9&3.6E-09&6.4E-13&0.0&198&98-300&5-219!!!PF17236.1&DUF5309 ; Family of unknown function (DUF5309)&97.2&2.3E-07&4.1E-11&0.0&244&106-355&4-288!!!PF13252.5&DUF4043 ; Protein of unknown function (DUF4043)&96.1&1.9E-05&3.4E-09&0.0&167&128-296&15-256!!!PF04454.11&Linocin_M18 ; Encapsulating protein for peroxidase&95.3&0.00014&2.4E-08&0.0&136&161-306&68-216!!!PF09950.8&DUF2184 ; Uncharacterized protein conserved in bacteria (DUF2184)&92.8&0.0023&4E-07&0.0&114&152-266&10-145", "GO_hit": "GO:0008233 peptidase activity !!!GO:0042742 defense response to bacterium", "KO_hit": "unknown function", "trna_type": ""}, {"start": 37251, "end": 37845, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "38.27", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 37980, "end": 38808, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "125.97", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 38835, "end": 39570, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "57.19", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 39566, "end": 39935, "strand": 1, "label": "unknown function", "category": "unknown function", "color": "#c9c9c9", "phrog": "phrog_30974", "score": "76.2", "eval": "2.7e-23", "hostDomain": "Bacteria:2", "Avg_#AA": "769.0", "#ColMSA": "824.0", "#prot": "2", "RefSeq": "hypothetical protein [n=1]; LysM-like protein [n=1];", "Pfam_hit": "PF04434.16&SWIM ; SWIM zinc finger&94.2&0.00045&1.2E-07&0.0&25&229-264&12-36", "GO_hit": "GO:0008270 zinc ion binding", "KO_hit": "unknown function", "trna_type": ""}, {"start": 39931, "end": 40375, "strand": 1, "label": "unknown function", "category": "unknown function", "color": "#c9c9c9", "phrog": "phrog_2819", "score": "95.4", "eval": "4.9e-29", "hostDomain": "Bacteria:51", "Avg_#AA": "158.0", "#ColMSA": "165.0", "#prot": "51", "RefSeq": "hypothetical protein [n=49]; protein of an unannotated phage [n=2];", "Pfam_hit": "unknown function", "GO_hit": "unknown function", "KO_hit": "unknown function", "trna_type": ""}, {"start": 40371, "end": 40710, "strand": 1, "label": "unknown function", "category": "unknown", "color": "#c9c9c9", "phrog": "", "score": "58.37", "eval": "", "hostDomain": "", "Avg_#AA": "", "#ColMSA": "", "#prot": "", "RefSeq": "", "Pfam_hit": "", "GO_hit": "", "KO_hit": "", "trna_type": ""}, {"start": 40737, "end": 44775, "strand": 1, "label": "minor tail protein", "category": "tail", "color": "#07e9a2", "phrog": "phrog_2840", "score": "254.6", "eval": "2.2e-77", "hostDomain": "Bacteria:51", "Avg_#AA": "1267.0", "#ColMSA": "1286.0", "#prot": "51", "RefSeq": "minor tail protein [n=26]; hypothetical protein [n=21]; protein of an unannotated phage [n=2]; structural protein [n=1]; minor tail protein, structural [n=1];", "Pfam_hit": "PF15425.5&DUF4627 ; Domain of unknown function (DUF4627)&96.3&6.9E-06&1.6E-09&0.0&106&1089-1200&51-196!!!PF15425.5&DUF4627 ; Domain of unknown function (DUF4627)&94.0&0.00059&1.4E-07&0.0&69&832-901&1-92!!!PF04862.11&DUF642 ; Protein of unknown function (DUF642)&92.3&0.0023&5.4E-07&0.0&88&880-987&69-158", "GO_hit": "unknown function", "KO_hit": "unknown function", "trna_type": ""}];
+  const categoryColors = {"head and packaging": "#3e83f6", "tail": "#07e9a2", "lysis": "#f35f49", "DNA, RNA and nucleotide metabolism": "#ffdf59", "other": "#838383", "unknown function": "#c9c9c9"};
+  const tableColumns = [{"key": "phrog", "header": "PHROG"}, {"key": "label", "header": "Label"}, {"key": "category", "header": "Category"}, {"key": "hostDomain", "header": "hostDomain"}, {"key": "Avg_#AA", "header": "Avg #AA"}, {"key": "#ColMSA", "header": "#ColMSA"}, {"key": "#prot", "header": "# Prot"}, {"key": "RefSeq", "header": "RefSeq"}, {"key": "Pfam_hit", "header": "Pfam hit"}, {"key": "GO_hit", "header": "GO hit"}, {"key": "KO_hit", "header": "KO hit"}, {"key": "start", "header": "Start"}, {"key": "end", "header": "End"}, {"key": "strand", "header": "Strand"}, {"key": "score", "header": "Score"}, {"key": "eval", "header": "E-value"}];
+  const contigLength = 44776;
+  const gcPositions = [111, 334, 557, 780, 1003, 1226, 1449, 1672, 1895, 2118, 2341, 2564, 2787, 3010, 3233, 3456, 3679, 3902, 4125, 4348, 4571, 4794, 5017, 5240, 5463, 5686, 5909, 6132, 6355, 6578, 6801, 7024, 7247, 7470, 7693, 7916, 8139, 8362, 8585, 8808, 9031, 9254, 9477, 9700, 9923, 10146, 10369, 10592, 10815, 11038, 11261, 11484, 11707, 11930, 12153, 12376, 12599, 12822, 13045, 13268, 13491, 13714, 13937, 14160, 14383, 14606, 14829, 15052, 15275, 15498, 15721, 15944, 16167, 16390, 16613, 16836, 17059, 17282, 17505, 17728, 17951, 18174, 18397, 18620, 18843, 19066, 19289, 19512, 19735, 19958, 20181, 20404, 20627, 20850, 21073, 21296, 21519, 21742, 21965, 22188, 22411, 22634, 22857, 23080, 23303, 23526, 23749, 23972, 24195, 24418, 24641, 24864, 25087, 25310, 25533, 25756, 25979, 26202, 26425, 26648, 26871, 27094, 27317, 27540, 27763, 27986, 28209, 28432, 28655, 28878, 29101, 29324, 29547, 29770, 29993, 30216, 30439, 30662, 30885, 31108, 31331, 31554, 31777, 32000, 32223, 32446, 32669, 32892, 33115, 33338, 33561, 33784, 34007, 34230, 34453, 34676, 34899, 35122, 35345, 35568, 35791, 36014, 36237, 36460, 36683, 36906, 37129, 37352, 37575, 37798, 38021, 38244, 38467, 38690, 38913, 39136, 39359, 39582, 39805, 40028, 40251, 40474, 40697, 40920, 41143, 41366, 41589, 41812, 42035, 42258, 42481, 42704, 42927, 43150, 43373, 43596, 43819, 44042, 44265, 44488, 44688];
+  const gcContent = [47.98206278026906, 48.87892376681614, 49.327354260089685, 47.53363228699551, 48.87892376681614, 53.81165919282511, 51.569506726457405, 41.25560538116592, 56.502242152466366, 58.29596412556054, 56.95067264573991, 50.672645739910315, 50.672645739910315, 49.775784753363226, 51.569506726457405, 52.46636771300448, 56.05381165919282, 53.36322869955157, 54.26008968609865, 55.15695067264574, 55.15695067264574, 56.95067264573991, 49.327354260089685, 53.81165919282511, 54.26008968609865, 52.46636771300448, 46.18834080717489, 50.224215246636774, 54.7085201793722, 48.87892376681614, 37.219730941704036, 54.26008968609865, 51.12107623318386, 55.15695067264574, 51.12107623318386, 46.18834080717489, 51.569506726457405, 56.05381165919282, 48.4304932735426, 52.91479820627802, 56.502242152466366, 53.36322869955157, 49.327354260089685, 52.46636771300448, 43.49775784753363, 44.39461883408072, 48.4304932735426, 43.946188340807176, 50.672645739910315, 52.91479820627802, 50.224215246636774, 46.18834080717489, 49.775784753363226, 52.46636771300448, 49.775784753363226, 40.80717488789238, 46.63677130044843, 46.63677130044843, 53.81165919282511, 52.46636771300448, 53.36322869955157, 53.36322869955157, 59.19282511210763, 58.29596412556054, 60.53811659192825, 63.22869955156951, 66.3677130044843, 55.60538116591929, 59.64125560538116, 59.19282511210763, 60.53811659192825, 56.502242152466366, 55.15695067264574, 58.744394618834086, 59.64125560538116, 55.60538116591929, 55.15695067264574, 57.847533632286996, 51.569506726457405, 56.502242152466366, 53.81165919282511, 52.91479820627802, 57.399103139013455, 54.7085201793722, 57.847533632286996, 64.12556053811659, 57.847533632286996, 54.7085201793722, 53.36322869955157, 58.744394618834086, 50.224215246636774, 56.05381165919282, 51.12107623318386, 56.05381165919282, 56.05381165919282, 56.95067264573991, 53.81165919282511, 57.399103139013455, 56.05381165919282, 56.05381165919282, 49.775784753363226, 60.0896860986547, 59.19282511210763, 63.67713004484305, 58.744394618834086, 57.847533632286996, 62.33183856502242, 47.08520179372198, 58.29596412556054, 52.91479820627802, 53.36322869955157, 54.26008968609865, 54.7085201793722, 56.05381165919282, 57.847533632286996, 56.502242152466366, 60.98654708520179, 55.15695067264574, 59.64125560538116, 58.29596412556054, 58.29596412556054, 56.502242152466366, 54.26008968609865, 54.26008968609865, 47.53363228699551, 56.95067264573991, 51.569506726457405, 57.399103139013455, 54.7085201793722, 58.29596412556054, 54.26008968609865, 56.05381165919282, 53.36322869955157, 51.12107623318386, 52.46636771300448, 49.775784753363226, 52.91479820627802, 47.08520179372198, 44.843049327354265, 51.12107623318386, 58.29596412556054, 56.05381165919282, 56.502242152466366, 55.60538116591929, 59.19282511210763, 55.15695067264574, 41.70403587443946, 36.32286995515695, 41.70403587443946, 48.4304932735426, 40.35874439461883, 43.04932735426009, 41.70403587443946, 51.569506726457405, 50.672645739910315, 61.88340807174888, 59.64125560538116, 62.33183856502242, 69.50672645739911, 52.91479820627802, 61.43497757847533, 54.26008968609865, 57.847533632286996, 55.60538116591929, 58.29596412556054, 61.88340807174888, 46.18834080717489, 55.15695067264574, 44.843049327354265, 50.224215246636774, 48.87892376681614, 52.91479820627802, 54.7085201793722, 55.60538116591929, 51.569506726457405, 59.19282511210763, 54.7085201793722, 55.60538116591929, 55.15695067264574, 56.05381165919282, 57.399103139013455, 56.95067264573991, 50.224215246636774, 51.569506726457405, 56.95067264573991, 54.7085201793722, 54.26008968609865, 52.91479820627802, 53.36322869955157, 46.18834080717489, 54.7085201793722, 53.36322869955157, 55.60538116591929, 57.399103139013455, 56.05381165919282, 53.81165919282511, 51.569506726457405, 57.847533632286996, 54.7085201793722, 53.36322869955157, 57.38636363636363];
+  const gcSkew = [10.2803738317757, 11.926605504587156, 18.181818181818183, 11.320754716981133, 13.761467889908257, 8.333333333333332, 2.608695652173913, 26.08695652173913, 4.761904761904762, 6.153846153846154, 8.661417322834646, 0.8849557522123894, 4.424778761061947, 24.324324324324326, 2.608695652173913, -2.564102564102564, 15.2, 12.605042016806722, 23.96694214876033, 15.447154471544716, 8.94308943089431, 2.3622047244094486, -5.454545454545454, -3.3333333333333335, 17.355371900826448, 2.564102564102564, 6.796116504854369, 8.928571428571429, 1.639344262295082, 13.761467889908257, 25.301204819277107, 0.8264462809917356, -5.263157894736842, 0.8130081300813009, 12.280701754385964, -0.9708737864077669, 7.82608695652174, 2.4, -9.25925925925926, 13.559322033898304, -9.523809523809524, 17.647058823529413, 3.6363636363636362, 4.273504273504273, -1.0309278350515463, 13.131313131313133, 7.4074074074074066, -10.204081632653061, 16.8141592920354, -8.47457627118644, 3.571428571428571, 2.912621359223301, 2.7027027027027026, -4.273504273504273, 11.711711711711711, -7.6923076923076925, 11.538461538461538, -5.769230769230769, -3.3333333333333335, -9.401709401709402, 5.88235294117647, 4.201680672268908, 3.0303030303030303, -15.384615384615385, -12.592592592592592, -6.382978723404255, 18.91891891891892, 3.225806451612903, -12.781954887218044, -9.090909090909092, 9.62962962962963, -11.11111111111111, 4.0650406504065035, -8.396946564885496, 2.2556390977443606, 3.225806451612903, -8.94308943089431, -2.3255813953488373, -16.52173913043478, 0.0, -11.666666666666666, 0.0, -3.125, 1.639344262295082, -3.875968992248062, 7.6923076923076925, 2.3255813953488373, -24.59016393442623, 9.243697478991598, -9.923664122137405, -3.571428571428571, -0.8, 15.789473684210526, -4.0, -5.6000000000000005, -2.3622047244094486, -8.333333333333332, 9.375, -0.8, -5.6000000000000005, -13.513513513513514, 0.0, -3.0303030303030303, -7.042253521126761, -14.50381679389313, -28.68217054263566, -13.66906474820144, 2.857142857142857, -1.5384615384615385, 0.0, -9.243697478991598, -14.049586776859504, -6.557377049180328, -2.4, -2.3255813953488373, 3.1746031746031744, 4.411764705882353, -5.691056910569105, -0.7518796992481203, 0.0, -7.6923076923076925, -22.22222222222222, -2.479338842975207, -9.090909090909092, 1.8867924528301887, -0.7874015748031495, -9.565217391304348, -10.9375, -21.311475409836063, -12.307692307692308, -23.96694214876033, 0.8, -9.243697478991598, -7.017543859649122, 7.6923076923076925, -11.711711711711711, -6.779661016949152, -6.666666666666667, -2.0, 3.508771929824561, -13.846153846153847, 2.4, -4.761904761904762, -19.35483870967742, 4.545454545454546, -15.447154471544716, -3.225806451612903, 13.580246913580247, 5.376344086021505, 9.25925925925926, 2.2222222222222223, 6.25, 16.129032258064516, 7.82608695652174, 7.964601769911504, -21.73913043478261, -11.278195488721805, -9.352517985611511, -16.129032258064516, -16.94915254237288, -10.948905109489052, -7.43801652892562, -5.426356589147287, -12.903225806451612, -1.5384615384615385, -20.28985507246377, -2.912621359223301, 5.691056910569105, -18.0, -5.357142857142857, 4.587155963302752, -13.559322033898304, -4.918032786885246, -8.064516129032258, 0.8695652173913043, 3.0303030303030303, -1.639344262295082, 19.35483870967742, -4.0650406504065035, 12.0, 14.0625, -19.68503937007874, 5.357142857142857, -7.82608695652174, 10.236220472440944, -14.754098360655737, 12.396694214876034, -8.47457627118644, -10.92436974789916, -0.9708737864077669, -1.639344262295082, -5.88235294117647, -6.451612903225806, -4.6875, 0.8, -13.333333333333334, -20.0, -6.976744186046512, -6.557377049180328, -0.8403361344537815, -20.792079207920793];
+  const gcCumSkew = [10.2803738317757, 22.206979336362856, 40.388797518181036, 51.70955223516217, 65.47102012507042, 73.80435345840375, 76.41304911057766, 102.50000563231679, 107.26191039422154, 113.4157565480677, 122.07717387090236, 122.96212962311475, 127.38690838417669, 151.71123270850103, 154.31992836067494, 151.75582579657237, 166.95582579657236, 179.56086781337908, 203.5278099621394, 218.9749644336841, 227.9180538645784, 230.28025858898786, 224.8257131344424, 221.49237980110905, 238.8477517019355, 241.41185426603806, 248.20797077089244, 257.13654219946386, 258.77588646175894, 272.5373543516672, 297.83855917094434, 298.66500545193605, 293.40184755719923, 294.21485568728053, 306.4955574416665, 305.52468365525874, 313.3507706117805, 315.75077061178047, 306.49151135252123, 320.0508333864195, 310.52702386261, 328.1740826861394, 331.810446322503, 336.0839505960073, 335.05302276095574, 348.18433589226885, 355.59174329967624, 345.38766166702317, 362.2018209590586, 353.72724468787214, 357.2986732593007, 360.211294618524, 362.9139973212267, 358.64049304772243, 370.35220475943413, 362.65989706712645, 374.198358605588, 368.4291278363572, 365.0957945030239, 355.6940851013145, 361.57643804249096, 365.7781187147599, 368.8084217450629, 353.42380636044754, 340.83121376785493, 334.44823504445066, 353.36715396336956, 356.5929604149825, 343.81100552776445, 334.7200964368554, 344.349726066485, 333.2386149553739, 337.3036556057804, 328.90670904089495, 331.1623481386393, 334.3881545902522, 325.4450651593579, 323.1194837640091, 306.5977446335743, 306.5977446335743, 294.9310779669076, 294.9310779669076, 291.8060779669076, 293.4454222292027, 289.5694532369546, 297.26176092926227, 299.5873423246111, 274.99717839018484, 284.2408758691764, 274.31721174703904, 270.7457831756105, 269.9457831756105, 285.735256859821, 281.735256859821, 276.13525685982097, 273.77305213541155, 265.43971880207823, 274.81471880207823, 274.0147188020782, 268.4147188020782, 254.90120528856468, 254.90120528856468, 251.87090225826165, 244.8286487371349, 230.32483194324178, 201.64266140060613, 187.9735966524047, 190.83073950954756, 189.292277971086, 189.292277971086, 180.0485804920944, 165.9989937152349, 159.44161666605456, 157.04161666605455, 154.7160352707057, 157.89063844530887, 162.3024031511912, 156.6113462406221, 155.859466541374, 155.859466541374, 148.1671588490663, 125.94493662684408, 123.46559778386887, 114.37468869295978, 116.26148114578997, 115.47407957098682, 105.90886217968247, 94.97136217968247, 73.65988676984641, 61.3521944621541, 37.38525231339377, 38.18525231339377, 28.94155483440217, 21.924010974753045, 29.61631866706074, 17.904606955349028, 11.124945938399875, 4.4582792717332085, 2.4582792717332085, 5.967051201557769, -7.8791026445960775, -5.479102644596077, -10.241007406500838, -29.595846116178258, -25.05039157072371, -40.497546042268425, -43.72335249388133, -30.143105580301082, -24.766761494279578, -15.507502235020318, -13.285280012798097, -7.035280012798097, 9.093752245266419, 16.919839201788157, 24.88444097169966, 3.1453105369170515, -8.132884951804753, -17.485402937416264, -33.61443519548078, -50.56358773785366, -61.51249284734271, -68.95050937626833, -74.37686596541562, -87.28009177186723, -88.81855331032877, -109.10840838279253, -112.02102974201583, -106.32997283144672, -124.32997283144672, -129.68711568858959, -125.09995972528684, -138.65928175918515, -143.5773145460704, -151.64183067510265, -150.77226545771134, -147.7419624274083, -149.3813066897034, -130.02646798002598, -134.0915086304325, -122.09150863043249, -108.02900863043249, -127.71404800051123, -122.35690514336837, -130.1829920998901, -119.94677162744915, -134.7008699881049, -122.30417577322886, -130.7787520444153, -141.70312179231448, -142.67399557872224, -144.31333984101732, -150.1956927821938, -156.64730568541958, -161.33480568541958, -160.53480568541957, -173.8681390187529, -193.8681390187529, -200.84488320479943, -207.40226025397976, -208.24259638843355, -229.03467559635436];
+
+  data.forEach(function(d, i) { d._idx = i; });
+
+  // Theme toggle (persisted in localStorage)
+  const docBody = document.body;
+  const themeToggle = document.getElementById("theme-toggle");
+  function updateThemeIcon() {
+    themeToggle.textContent = docBody.classList.contains("dark") ? "☀" : "☾";
+  }
+  // Respect the theme chosen when the file was generated. Only fall back
+  // to a saved browser preference when no explicit theme was baked in.
+  const initialTheme = docBody.dataset.theme;
+  if (initialTheme === "dark") {
+    docBody.classList.add("dark");
+  } else if (initialTheme === "light") {
+    docBody.classList.remove("dark");
+  } else {
+    try {
+      const savedTheme = localStorage.getItem("pca-theme");
+      if (savedTheme === "dark") docBody.classList.add("dark");
+      else if (savedTheme === "light") docBody.classList.remove("dark");
+    } catch (e) {}
+  }
+  updateThemeIcon();
+  themeToggle.addEventListener("click", function() {
+    docBody.classList.toggle("dark");
+    try {
+      localStorage.setItem("pca-theme", docBody.classList.contains("dark") ? "dark" : "light");
+    } catch (e) {}
+    updateThemeIcon();
+  });
+
+  const margin = {top: 55, right: 220, bottom: 55, left: 80};
+  const trackHeight = 55;
+  const trackGap = 35;
+  const forwardY = trackHeight / 2;
+  const reverseY = trackHeight * 1.5 + trackGap;
+  const trackHeightTotal = reverseY + trackHeight / 2 + 20;
+  const legendRowHeight = 44;
+  const legendHeight = legendRowHeight * Object.keys(categoryColors).length + 30;
+  const plotHeight = Math.max(trackHeightTotal, legendHeight);
+  const overviewHeight = 55;
+
+  const chartDiv = document.getElementById("chart");
+  let width = Math.max(600, chartDiv.clientWidth) - margin.left - margin.right;
+
+  const x = d3.scaleLinear().domain([0, contigLength]).range([0, width]);
+  let currentXScale = x.copy();
+  let currentTransform = d3.zoomIdentity;
+
+  let showLabels = true;
+  let showNoPhrog = false;
+  const minZoom = 1;
+  const maxZoom = 50;
+  const zoomStep = 1.3;
+  const panStep = 0.2;
+
+  // --- Main SVG ---
+  const svg = d3.select("#chart")
+    .append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", plotHeight + margin.top + margin.bottom)
+    .style("display", "block");
+
+  const plotWrapper = svg.append("g")
+      .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  plotWrapper.append("defs").append("clipPath")
+      .attr("id", "plot-clip")
+    .append("rect")
+      .attr("width", width)
+      .attr("height", plotHeight);
+
+  const plotArea = plotWrapper.append("g")
+      .attr("class", "plot-area")
+      .attr("clip-path", "url(#plot-clip)");
+
+  const staticGroup = plotWrapper.append("g").attr("class", "static-group");
+
+  // --- Zoom behavior ---
+  const zoom = d3.zoom()
+    .scaleExtent([minZoom, maxZoom])
+    .extent([[0, 0], [width, plotHeight]])
+    .translateExtent([[0, 0], [width, plotHeight]])
+    .on("zoom", function(event) {
+      currentTransform = event.transform;
+      currentXScale = event.transform.rescaleX(x);
+      updateView();
+    });
+
+  // The root SVG captures pan/zoom events; genes and labels are drawn
+  // on top so their own click/hover handlers are reached first.
+  const overlay = svg;
+  svg.call(zoom);
+
+  const geneGroup = plotArea.append("g").attr("class", "gene-group");
+  const labelGroup = plotArea.append("g").attr("class", "label-group");
+  const axisGroup = plotArea.append("g").attr("class", "axis");
+  const legendGroup = svg.append("g")
+      .attr("class", "legend-group")
+      .attr("transform", "translate(" + (width + margin.left + 20) + ",20)");
+
+  staticGroup.append("text")
+    .attr("class", "track-label")
+    .attr("x", -10)
+    .attr("y", forwardY)
+    .attr("text-anchor", "end")
+    .attr("dominant-baseline", "middle")
+    .text("Forward (+)");
+
+  staticGroup.append("text")
+    .attr("class", "track-label")
+    .attr("x", -10)
+    .attr("y", reverseY)
+    .attr("text-anchor", "end")
+    .attr("dominant-baseline", "middle")
+    .text("Reverse (-)");
+
+  const axisLabel = plotArea.append("text")
+    .attr("class", "axis-label")
+    .attr("y", plotHeight + 40)
+    .style("text-anchor", "middle")
+    .text("Position (bp)");
+
+  const tooltip = d3.select("body").append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
+
+  const arrowHeadPx = 7;  // target arrow-head width in screen pixels
+  const featureHeight = 22;
+
+  // Compute a per-feature maximum arrow-head size (in bp) so arrow heads do
+  // not visually overlap other features.  The head is drawn inside the
+  // feature's own interval, so we shrink it until the head region is clear
+  // of every other feature.
+  const targetBp = x.invert(arrowHeadPx) - x.invert(0);
+  for (let i = 0; i < data.length; i++) {
+    const d = data[i];
+    let maxHeadBp = targetBp;
+    if (d.strand === 1) {
+      // Head would occupy [d.end - maxHeadBp, d.end].
+      for (let j = 0; j < data.length; j++) {
+        if (i === j) continue;
+        const o = data[j];
+        if (o.start < d.end && o.end > d.end - targetBp) {
+          const cap = (o.end <= d.end) ? d.end - o.end : d.end - o.start;
+          maxHeadBp = Math.min(maxHeadBp, cap);
+        }
+      }
+    } else {
+      // Head would occupy [d.start, d.start + maxHeadBp].
+      for (let j = 0; j < data.length; j++) {
+        if (i === j) continue;
+        const o = data[j];
+        if (o.end > d.start && o.start < d.start + targetBp) {
+          const cap = (o.start >= d.start) ? o.start - d.start : o.end - d.start;
+          maxHeadBp = Math.min(maxHeadBp, cap);
+        }
+      }
+    }
+    d.maxHeadBp = Math.max(0, maxHeadBp);
+  }
+
+  // --- Overview bar ---
+  const overviewDiv = d3.select("#overview");
+  const overviewWidth = overviewDiv.node().clientWidth;
+  const overviewSvg = overviewDiv.append("svg")
+    .attr("width", overviewWidth)
+    .attr("height", overviewHeight);
+  const overviewX = d3.scaleLinear().domain([0, contigLength]).range([0, overviewWidth]);
+  const overviewGroup = overviewSvg.append("g");
+
+  const overviewAxis = d3.axisTop(overviewX)
+    .ticks(Math.max(2, Math.floor(overviewWidth / 80)))
+    .tickSize(4)
+    .tickFormat(d3.format("~s"));
+  overviewGroup.append("g")
+    .attr("class", "overview-axis")
+    .attr("transform", "translate(0,22)")
+    .call(overviewAxis)
+    .selectAll("text")
+    .attr("dy", "-2px");
+
+  const overviewGeneHeight = 8;
+  const overviewForwardY = 26;
+  const overviewReverseY = 38;
+  overviewGroup.selectAll(".overview-gene")
+    .data(data.filter(function(d) { return d.phrog || d.label; }))
+    .enter()
+    .append("rect")
+    .attr("class", "overview-gene")
+    .attr("x", function(d) { return overviewX(d.start); })
+    .attr("y", function(d) { return d.strand === 1 ? overviewForwardY : overviewReverseY; })
+    .attr("width", function(d) { return Math.max(1, overviewX(d.end) - overviewX(d.start)); })
+    .attr("height", overviewGeneHeight)
+    .attr("fill", function(d) { return categoryColors[d.category] || d.color || "#c9c9c9"; })
+    .attr("stroke", "none");
+
+  const viewportRect = overviewGroup.append("rect")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", overviewWidth)
+    .attr("height", overviewHeight)
+    .attr("fill", "var(--overview-viewport-fill)")
+    .attr("stroke", "var(--overview-viewport-stroke)")
+    .attr("stroke-width", 2)
+    .style("pointer-events", "none");
+
+  function updateOverview() {
+    const visibleMin = Math.max(0, currentXScale.invert(0));
+    const visibleMax = Math.min(contigLength, currentXScale.invert(width));
+    viewportRect
+      .attr("x", overviewX(visibleMin))
+      .attr("width", Math.max(2, overviewX(visibleMax) - overviewX(visibleMin)));
+  }
+
+  overviewSvg.on("click", function(event) {
+    const [mx] = d3.pointer(event, overviewGroup.node());
+    const bp = Math.max(0, Math.min(contigLength, overviewX.invert(mx)));
+    const targetK = Math.max(1, currentTransform.k);
+    const tx = width / 2 - targetK * x(bp);
+    const newTransform = d3.zoomIdentity.translate(tx, 0).scale(targetK);
+    overlay.call(zoom.transform, clampTransform(newTransform));
+  });
+
+  // --- GC metrics line charts ---
+  function drawGcLineChart(containerId, values, color, title, yFormat, showXAxis) {
+    if (!values || values.length === 0) return;
+    const w = overviewWidth;
+    const chartMargin = {top: 12, right: 0, bottom: showXAxis ? 14 : 2, left: 0};
+    const h = Math.max(0, overviewHeight - chartMargin.top - chartMargin.bottom);
+    const svg = d3.select("#" + containerId).append("svg")
+      .attr("width", w)
+      .attr("height", overviewHeight);
+    const g = svg.append("g")
+      .attr("transform", "translate(0," + chartMargin.top + ")");
+
+    const xScale = d3.scaleLinear().domain([0, contigLength]).range([0, w]);
+    const yMin = d3.min(values);
+    const yMax = d3.max(values);
+    let yDomain;
+    if (title === "GC content") {
+      yDomain = [0, 100];
+    } else {
+      const yPad = (yMax - yMin) * 0.05 || Math.abs(yMax) * 0.05 || 1;
+      yDomain = [yMin - yPad, yMax + yPad];
+    }
+    const yScale = d3.scaleLinear()
+      .domain(yDomain)
+      .range([h, 0])
+      .nice();
+
+    const series = values.map(function(v, i) {
+      return {pos: gcPositions[i], value: v};
+    });
+
+    if (showXAxis) {
+      g.append("g")
+        .attr("class", "axis")
+        .attr("transform", "translate(0," + h + ")")
+        .call(d3.axisBottom(xScale)
+          .ticks(Math.max(2, Math.floor(w / 80)))
+          .tickSize(3)
+          .tickFormat(d3.format("~s")));
+    } else {
+      g.append("line")
+        .attr("x1", 0).attr("x2", w)
+        .attr("y1", h).attr("y2", h)
+        .attr("stroke", "var(--gc-axis)")
+        .attr("stroke-width", 0.5);
+    }
+
+    if (title !== "GC content" && yMin <= 0 && yMax >= 0) {
+      g.append("line")
+        .attr("class", "zero-line")
+        .attr("x1", 0).attr("x2", w)
+        .attr("y1", yScale(0)).attr("y2", yScale(0));
+    }
+
+    const line = d3.line()
+      .x(function(d) { return xScale(d.pos); })
+      .y(function(d) { return yScale(d.value); });
+
+    g.append("path")
+      .datum(series)
+      .attr("class", "line")
+      .attr("d", line)
+      .attr("stroke", color);
+
+    svg.append("text")
+      .attr("class", "gc-title")
+      .attr("x", 5)
+      .attr("y", 10)
+      .text(title);
+
+    const crosshair = g.append("line")
+      .attr("class", "crosshair")
+      .attr("y1", 0).attr("y2", h)
+      .style("opacity", 0);
+
+    const bisect = d3.bisector(function(d) { return d.pos; }).left;
+    const overlay = g.append("rect")
+      .attr("width", w).attr("height", h)
+      .style("fill", "none")
+      .style("pointer-events", "all");
+
+    overlay.on("mousemove", function(event) {
+      const mx = d3.pointer(event, g.node())[0];
+      const bp = Math.max(0, Math.min(contigLength, xScale.invert(mx)));
+      const idx = bisect(series, bp, 1);
+      const d0 = series[idx - 1];
+      const d1 = series[idx];
+      const d = (d0 && d1) ? (bp - d0.pos < d1.pos - bp ? d0 : d1) : (d0 || d1);
+      if (!d) return;
+      crosshair.attr("x1", xScale(d.pos)).attr("x2", xScale(d.pos)).style("opacity", 1);
+      tooltip.transition().duration(50).style("opacity", 0.95);
+      tooltip.html("<b>" + title + "</b><br>position: " + d3.format(",")(Math.round(d.pos)) + " bp<br>value: " + (yFormat || d3.format(".3g"))(d.value))
+        .style("left", (event.pageX + 10) + "px")
+        .style("top", (event.pageY - 28) + "px");
+    }).on("mouseout", function() {
+      crosshair.style("opacity", 0);
+      tooltip.transition().duration(300).style("opacity", 0);
+    });
+  }
+
+  if (gcPositions.length > 0) {
+    drawGcLineChart("gc-content-chart", gcContent, "#5b9bd5", "GC content", d3.format(".1f"), false);
+    drawGcLineChart("gc-skew-chart", gcSkew, "#e29642", "GC skew", d3.format(".1f"), false);
+    drawGcLineChart("gc-cumskew-chart", gcCumSkew, "#6cbf6b", "Cum. GC skew", d3.format(".1f"), true);
+  }
+
+  function genePath(d) {
+    const start = currentXScale(d.start);
+    const end = currentXScale(d.end);
+    const w = Math.max(0, end - start);
+    const maxHeadBp = (d.maxHeadBp !== undefined) ? d.maxHeadBp : x.invert(arrowHeadPx) - x.invert(0);
+    const headPixels = Math.min(x(maxHeadBp), w / 2);
+    const cy = d.strand === 1 ? forwardY : reverseY;
+    const y0 = cy - featureHeight / 2;
+    const y1 = cy + featureHeight / 2;
+    const mid = cy;
+
+    if (d.strand === 1) {
+      return "M" + start + "," + y0 +
+             "H" + (end - headPixels) +
+             "L" + end + "," + mid +
+             "L" + (end - headPixels) + "," + y1 +
+             "H" + start + "Z";
+    } else {
+      return "M" + (start + headPixels) + "," + y0 +
+             "H" + end +
+             "V" + y1 +
+             "H" + (start + headPixels) +
+             "L" + start + "," + mid + "Z";
+    }
+  }
+
+  function fillColor(d) {
+    return categoryColors[d.category] || d.color || "#c9c9c9";
+  }
+
+  function drawGenes() {
+    const genes = geneGroup.selectAll(".gene").data(data);
+    const genesEnter = genes.enter().append("path").attr("class", "gene");
+    genesEnter.merge(genes)
+      .attr("d", genePath)
+      .attr("fill", fillColor)
+      .attr("data-index", function(d) { return d._idx; })
+      .on("click", function(event, d) {
+        d3.selectAll(".gene").classed("selected", false);
+        d3.select(this).classed("selected", true);
+        highlightTableRow(d._idx);
+      })
+      .on("mouseover", function(event, d) {
+        tooltip.transition().duration(150).style("opacity", 0.95);
+        tooltip.html("<b>" + (d.label || "feature") + "</b>" +
+          "<br>category: " + (d.category || "n/a") +
+          "<br>phrog: " + (d.phrog || "n/a") +
+          "<br>score: " + (d.score || "n/a") +
+          "<br>e-value: " + (d.eval || "n/a"))
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY - 28) + "px");
+      })
+      .on("mousemove", function(event) {
+        tooltip.style("left", (event.pageX + 10) + "px")
+               .style("top", (event.pageY - 28) + "px");
+      })
+      .on("mouseout", function() {
+        tooltip.transition().duration(300).style("opacity", 0);
+      });
+    genes.exit().remove();
+  }
+
+  function hideOverlappingLabels() {
+    if (!showLabels) return;
+    const labels = labelGroup.selectAll(".label").nodes();
+    const padding = 4;
+    const items = labels.map(function(node) {
+      const bbox = node.getBBox();
+      return {node: node, left: bbox.x, right: bbox.x + bbox.width};
+    }).sort(function(a, b) { return a.left - b.left; });
+
+    let lastRight = -Infinity;
+    items.forEach(function(item) {
+      if (item.left < lastRight + padding) {
+        d3.select(item.node).classed("hidden", true);
+      } else {
+        d3.select(item.node).classed("hidden", false);
+        lastRight = item.right;
+      }
+    });
+  }
+
+  function drawLabels() {
+    if (!showLabels) {
+      labelGroup.selectAll(".label").remove();
+      return;
+    }
+    const labels = labelGroup.selectAll(".label").data(data.filter(function(d) {
+      return d.label && d.label.toLowerCase() !== "unknown function";
+    }));
+    const labelsEnter = labels.enter().append("text").attr("class", "label");
+    labelsEnter.merge(labels)
+      .attr("x", function(d) { return (currentXScale(d.start) + currentXScale(d.end)) / 2; })
+      .attr("y", function(d) {
+        const cy = d.strand === 1 ? forwardY : reverseY;
+        return d.strand === 1 ? cy - featureHeight / 2 - 4 : cy + featureHeight / 2 + 12;
+      })
+      .attr("text-anchor", "middle")
+      .classed("hidden", false)
+      .text(function(d) { return d.label; });
+    labels.exit().remove();
+
+    if (labelsEnter.size() > 0 || labels.size() > 0) {
+      requestAnimationFrame(hideOverlappingLabels);
+    }
+  }
+
+  function drawLegend() {
+    const legendItems = Object.entries(categoryColors);
+    if (legendItems.length === 0) return;
+
+    legendGroup.selectAll("*").remove();
+    legendGroup.append("text")
+      .attr("class", "legend-title")
+      .attr("x", 0)
+      .attr("y", 0)
+      .text("Category");
+
+    const rows = legendGroup.selectAll(".legend-item")
+      .data(legendItems)
+      .enter()
+      .append("g")
+      .attr("class", "legend-item")
+      .attr("transform", function(d, i) { return "translate(0," + ((i + 1) * legendRowHeight) + ")"; });
+
+    rows.append("rect")
+      .attr("width", 12)
+      .attr("height", 12)
+      .attr("fill", function(d) { return d[1]; })
+      .attr("class", "legend-box");
+
+    rows.append("foreignObject")
+      .attr("x", 18)
+      .attr("y", -2)
+      .attr("width", 190)
+      .attr("height", legendRowHeight)
+      .append("xhtml:div")
+      .attr("class", "legend-label")
+      .text(function(d) { return d[0]; });
+  }
+
+  function updateView() {
+    axisGroup.attr("transform", "translate(0," + (plotHeight + 15) + ")")
+      .call(d3.axisBottom(currentXScale).ticks(10).tickFormat(function(d) {
+        if (d >= 1000000) return (d / 1000000).toFixed(1) + "M";
+        if (d >= 1000) return (d / 1000).toFixed(d % 1000 === 0 ? 0 : 1) + "k";
+        return d;
+      }));
+
+    axisLabel.attr("x", width / 2);
+
+    geneGroup.selectAll(".gene").attr("d", genePath);
+    drawLabels();
+    updateOverview();
+  }
+
+  function setZoom(level, centerPixel) {
+    const k = Math.max(minZoom, Math.min(maxZoom, level));
+    const cx = centerPixel === undefined ? width / 2 : centerPixel;
+    // New transform: scale around cx, keep current translation as much as possible.
+    const tx = cx - k * (cx - currentTransform.x) / currentTransform.k;
+    const newTransform = d3.zoomIdentity.translate(tx, 0).scale(k);
+    overlay.call(zoom.transform, clampTransform(newTransform));
+  }
+
+  function clampTransform(t) {
+    const tx = Math.min(0, Math.max(width * (1 - t.k), t.x));
+    return d3.zoomIdentity.translate(tx, 0).scale(t.k);
+  }
+
+  function panBy(fraction) {
+    const visibleSpan = currentXScale.invert(width) - currentXScale.invert(0);
+    const shiftBp = fraction * visibleSpan;
+    const tx = currentTransform.x - currentTransform.k * x(shiftBp);
+    const newTransform = d3.zoomIdentity.translate(tx, 0).scale(currentTransform.k);
+    overlay.call(zoom.transform, clampTransform(newTransform));
+  }
+
+  d3.select("#zoom-in").on("click", function() {
+    setZoom(currentTransform.k * zoomStep, width / 2);
+  });
+  d3.select("#zoom-out").on("click", function() {
+    setZoom(currentTransform.k / zoomStep, width / 2);
+  });
+  d3.select("#zoom-reset").on("click", function() {
+    overlay.call(zoom.transform, d3.zoomIdentity);
+  });
+  d3.select("#pan-left").on("click", function() { panBy(-panStep); });
+  d3.select("#pan-right").on("click", function() { panBy(panStep); });
+  d3.select("#show-labels").on("change", function() {
+    showLabels = this.checked;
+    drawLabels();
+  });
+  d3.select("#show-no-phrog").on("change", function() {
+    showNoPhrog = this.checked;
+    currentPage = 0;
+    renderTable();
+    renderPagination();
+  });
+
+  // Wheel: vertical = zoom, horizontal/shift+wheel = pan.
+  overlay.on("wheel", function(event) {
+    event.preventDefault();
+    const isPan = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+    const point = d3.pointer(event, overlay.node());
+    if (isPan) {
+      const dx = event.deltaX || event.deltaY;
+      const tx = currentTransform.x - dx;
+      const newTransform = d3.zoomIdentity.translate(tx, 0).scale(currentTransform.k);
+      overlay.call(zoom.transform, clampTransform(newTransform));
+    } else {
+      const factor = event.deltaY < 0 ? zoomStep : 1 / zoomStep;
+      const k = Math.max(minZoom, Math.min(maxZoom, currentTransform.k * factor));
+      const tx = point[0] - k * (point[0] - currentTransform.x) / currentTransform.k;
+      const newTransform = d3.zoomIdentity.translate(tx, 0).scale(k);
+      overlay.call(zoom.transform, clampTransform(newTransform));
+    }
+  });
+
+  function pastelColor(hex) {
+    const rgb = d3.rgb(hex);
+    return d3.rgb(
+      Math.round(255 - (255 - rgb.r) * 0.25),
+      Math.round(255 - (255 - rgb.g) * 0.25),
+      Math.round(255 - (255 - rgb.b) * 0.25)
+    ).formatHex();
+  }
+
+  const tableContainer = d3.select("#annotation-table");
+  tableContainer.append("h4")
+    .text("Annotations");
+  const tableWrap = tableContainer.append("div").attr("class", "table-wrap");
+  const table = tableWrap.append("table");
+  const theadRow = table.append("thead").append("tr");
+  theadRow.append("th").attr("class", "expander-col").text("");
+  tableColumns.forEach(function(col) {
+    theadRow.append("th").text(col.header);
+  });
+  const tbody = table.append("tbody");
+  const paginationDiv = tableContainer.append("div").attr("class", "pagination");
+  paginationDiv.append("button")
+    .attr("id", "page-prev")
+    .text("Previous")
+    .on("click", function() {
+      if (currentPage > 0) {
+        currentPage--;
+        renderTable();
+        renderPagination();
+      }
+    });
+  paginationDiv.append("span").attr("class", "page-info");
+  paginationDiv.append("button")
+    .attr("id", "page-next")
+    .text("Next")
+    .on("click", function() {
+      if ((currentPage + 1) * rowsPerPage < tableData().length) {
+        currentPage++;
+        renderTable();
+        renderPagination();
+      }
+    });
+
+  const rowsPerPage = 10;
+  let currentPage = 0;
+
+  function tableData() {
+    if (showNoPhrog) return data;
+    return data.filter(function(d) { return d.phrog || d.trna_type; });
+  }
+
+  // Click any table cell to highlight the corresponding feature on the map.
+  tbody.on("click", function(event) {
+    if (event.target.closest(".row-expander")) return;
+    const cell = event.target.closest("td");
+    if (!cell) return;
+    const row = cell.closest("tr");
+    const d = row && row.__data__;
+    if (d) highlightFeature(d._idx);
+  });
+
+  function renderTable() {
+    const tData = tableData();
+    const pageData = tData.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage);
+    const rows = tbody.selectAll("tr").data(pageData, function(d) { return d._idx; });
+    rows.exit().remove();
+    const rowsEnter = rows.enter().append("tr").style("cursor", "pointer");
+    const allRows = rowsEnter.merge(rows);
+    function rowColor(d) {
+      return pastelColor(categoryColors[d.category] || d.color || "#ffffff");
+    }
+    allRows
+      .style("--row-bg", rowColor)
+      .style("--row-bg-even", rowColor)
+      .each(function(d) {
+        const row = d3.select(this);
+        row.selectAll("td").remove();
+        row.append("td")
+          .attr("class", "expander-col")
+          .append("button")
+          .attr("class", "row-expander")
+          .text(d._expanded ? "see less" : "see more")
+          .on("click", function(event) {
+            event.stopPropagation();
+            d._expanded = !d._expanded;
+            d3.select(this).text(d._expanded ? "see less" : "see more");
+            row.classed("expanded", d._expanded);
+          });
+        tableColumns.forEach(function(col) {
+          let val = d[col.key];
+          if (val === undefined || val === null || val === "") val = "-";
+          row.append("td")
+            .attr("data-col", col.key)
+            .text(String(val));
+        });
+      });
+  }
+
+  function renderPagination() {
+    const tData = tableData();
+    const totalPages = Math.ceil(tData.length / rowsPerPage) || 1;
+    if (currentPage >= totalPages) currentPage = totalPages - 1;
+    paginationDiv.select(".page-info")
+      .text("Page " + (currentPage + 1) + " of " + totalPages + " (" + tData.length + " features)");
+    paginationDiv.select("#page-prev").property("disabled", currentPage === 0);
+    paginationDiv.select("#page-next").property("disabled", (currentPage + 1) >= totalPages);
+  }
+
+  function highlightFeature(index) {
+    const feature = data[index];
+    const centerBp = (feature.start + feature.end) / 2;
+    const visibleSpan = currentXScale.invert(width) - currentXScale.invert(0);
+    // If feature is outside the visible window, center on it.
+    if (centerBp < currentXScale.invert(0) || centerBp > currentXScale.invert(width) || visibleSpan > contigLength * 0.9) {
+      const targetK = currentTransform.k > 2 ? currentTransform.k : 3;
+      const tx = width / 2 - targetK * x(centerBp);
+      const newTransform = d3.zoomIdentity.translate(tx, 0).scale(targetK);
+      overlay.call(zoom.transform, clampTransform(newTransform));
+    }
+    d3.selectAll(".gene").classed("selected", false);
+    d3.select('.gene[data-index="' + index + '"]').classed("selected", true);
+    highlightTableRow(index);
+  }
+
+  function highlightTableRow(index) {
+    const feature = data[index];
+    if (!feature.phrog && !showNoPhrog) {
+      showNoPhrog = true;
+      d3.select("#show-no-phrog").property("checked", true);
+      currentPage = 0;
+      renderTable();
+      renderPagination();
+    }
+    const tData = tableData();
+    const localIndex = tData.findIndex(function(d) { return d._idx === index; });
+    if (localIndex >= 0) {
+      const page = Math.floor(localIndex / rowsPerPage);
+      if (page !== currentPage) {
+        currentPage = page;
+        renderTable();
+        renderPagination();
+      }
+      tbody.selectAll("tr").classed("annotation-row-highlight", function(d) {
+        return d._idx === index;
+      });
+      const rowNode = tbody.selectAll("tr").filter(function(d) { return d._idx === index; }).node();
+      if (rowNode) rowNode.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+
+  drawGenes();
+  drawLegend();
+  updateView();
+  renderTable();
+  renderPagination();
+})();
+</script>
+</body>
+</html>
