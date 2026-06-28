@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+import json
 import logging
 import os
 import warnings
@@ -10,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-import plotly.graph_objects as go
 from Bio import BiopythonWarning, SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
@@ -96,188 +97,308 @@ def _attach_sequences(
         yield record
 
 
-def _plotly_hover_text(feature: Any, record_id: str = "") -> str:
-    """Build hover text for a feature in the interactive plot."""
-    qualifiers = getattr(feature, "qualifiers", {})
-    label = qualifiers.get("label") or record_id or "feature"
-    if isinstance(label, list):
-        label = label[0]
-    lines = [f"<b>{label}</b>"]
-    for key in ("phrog", "category", "eval", "score", "color", "trna_type"):
-        value = qualifiers.get(key)
-        if value is not None:
-            if isinstance(value, list):
-                value = value[0]
-            lines.append(f"{key}: {value}")
-    return "<br>".join(lines)
+def _qualifier_to_str(value: Any) -> str:
+    """Return a qualifier value as a plain string."""
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return str(value[0]) if value else ""
+    return str(value)
 
 
-def _hex_to_luminance(hex_color: str) -> float:
-    """Return relative luminance of a hex color (light ≈ 1, dark ≈ 0)."""
-    hex_color = hex_color.lstrip("#")
-    if len(hex_color) == 3:
-        hex_color = "".join(c * 2 for c in hex_color)
-    try:
-        r = int(hex_color[0:2], 16) / 255.0
-        g = int(hex_color[2:4], 16) / 255.0
-        b = int(hex_color[4:6], 16) / 255.0
-    except (ValueError, IndexError):
-        return 0.5
-    # sRGB gamma correction
-    r = r / 12.92 if r <= 0.03928 else ((r + 0.055) / 1.055) ** 2.4
-    g = g / 12.92 if g <= 0.03928 else ((g + 0.055) / 1.055) ** 2.4
-    b = b / 12.92 if b <= 0.03928 else ((b + 0.055) / 1.055) ** 2.4
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+def _feature_to_dict(feature: Any) -> dict[str, Any]:
+    """Return a JSON-serializable dict describing a SeqFeature."""
+    return {
+        "start": int(feature.location.start),
+        "end": int(feature.location.end),
+        "strand": feature.location.strand or 1,
+        "label": _qualifier_to_str(feature.qualifiers.get("label")),
+        "category": _qualifier_to_str(feature.qualifiers.get("category")),
+        "color": _qualifier_to_str(feature.qualifiers.get("color", "#c9c9c9")),
+        "phrog": _qualifier_to_str(feature.qualifiers.get("phrog")),
+        "score": _qualifier_to_str(feature.qualifiers.get("score")),
+        "eval": _qualifier_to_str(feature.qualifiers.get("eval")),
+        "trna_type": _qualifier_to_str(feature.qualifiers.get("trna_type")),
+    }
+
+
+_D3_HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>__TITLE__</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  body { font-family: Arial, Helvetica, sans-serif; margin: 20px; background: #fff; }
+  #chart { width: 100%; overflow-x: auto; }
+  .axis path, .axis line { fill: none; stroke: #333; shape-rendering: crispEdges; }
+  .axis text { font-size: 12px; }
+  .track-label { font-size: 12px; font-weight: bold; fill: #333; }
+  .center-line { stroke: #999; stroke-width: 1; }
+  .gene { stroke: #333; stroke-width: 1px; cursor: pointer; }
+  .gene:hover { stroke: #000; stroke-width: 2px; }
+  .label { font-size: 11px; fill: #000; pointer-events: none; }
+  .tooltip {
+    position: absolute;
+    text-align: left;
+    padding: 8px;
+    font-size: 12px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    pointer-events: none;
+    box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+  }
+  .legend { font-size: 12px; }
+  .legend-box { stroke: #333; stroke-width: 1px; }
+  .legend-title { font-weight: bold; font-size: 13px; }
+  .legend-label { font-size: 12px; line-height: 1.2; word-wrap: break-word; color: #000; }
+</style>
+</head>
+<body>
+<h3 style="text-align:center;">__TITLE__</h3>
+<div id="chart"></div>
+<script>
+(function() {
+  const data = __FEATURES_JSON__;
+  const categoryColors = __COLORS_JSON__;
+  const contigLength = __CONTIG_LENGTH__;
+
+  const margin = {top: 60, right: 200, bottom: 70, left: 80};
+  const plotWidth = Math.max(900, Math.min(1800, contigLength / 35));
+  const width = plotWidth - margin.left - margin.right;
+  const trackHeight = 55;
+  const trackGap = 35;
+  const forwardY = trackHeight / 2;
+  const reverseY = trackHeight * 1.5 + trackGap;
+  const trackHeightTotal = reverseY + trackHeight / 2 + 20;
+
+  // Legend is placed to the right; ensure the SVG is tall enough.
+  const legendRowHeight = 44;
+  const legendHeight = legendRowHeight * Object.keys(categoryColors).length + 30;
+  const height = Math.max(trackHeightTotal, legendHeight);
+
+  const svg = d3.select("#chart")
+    .append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+  const x = d3.scaleLinear()
+    .domain([0, contigLength])
+    .range([0, width]);
+
+  // Axis
+  svg.append("g")
+    .attr("class", "axis")
+    .attr("transform", "translate(0," + (height + 15) + ")")
+    .call(d3.axisBottom(x).ticks(10).tickFormat(function(d) {
+      if (d >= 1000000) return (d / 1000000).toFixed(1) + "M";
+      if (d >= 1000) return (d / 1000).toFixed(d % 1000 === 0 ? 0 : 1) + "k";
+      return d;
+    }));
+
+  svg.append("text")
+    .attr("x", width / 2)
+    .attr("y", height + 50)
+    .style("text-anchor", "middle")
+    .style("font-size", "14px")
+    .text("Position (bp)");
+
+  // Track labels
+  svg.append("text")
+    .attr("class", "track-label")
+    .attr("x", -10)
+    .attr("y", forwardY)
+    .attr("text-anchor", "end")
+    .attr("dominant-baseline", "middle")
+    .text("Forward (+)");
+
+  svg.append("text")
+    .attr("class", "track-label")
+    .attr("x", -10)
+    .attr("y", reverseY)
+    .attr("text-anchor", "end")
+    .attr("dominant-baseline", "middle")
+    .text("Reverse (-)");
+
+  // Center lines
+  svg.append("line")
+    .attr("class", "center-line")
+    .attr("x1", 0).attr("x2", width)
+    .attr("y1", forwardY).attr("y2", forwardY);
+  svg.append("line")
+    .attr("class", "center-line")
+    .attr("x1", 0).attr("x2", width)
+    .attr("y1", reverseY).attr("y2", reverseY);
+
+  const tooltip = d3.select("body").append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
+
+  const arrowHeadBp = Math.max(150, contigLength * 0.006);
+  const featureHeight = 22;
+
+  function genePath(d) {
+    const start = x(d.start);
+    const end = x(d.end);
+    const width = Math.max(0, end - start);
+    const headPixels = Math.min(x(arrowHeadBp) - x(0), width / 2);
+    const cy = d.strand === 1 ? forwardY : reverseY;
+    const y0 = cy - featureHeight / 2;
+    const y1 = cy + featureHeight / 2;
+    const mid = cy;
+
+    if (d.strand === 1) {
+      return "M" + start + "," + y0 +
+             "H" + (end - headPixels) +
+             "L" + end + "," + mid +
+             "L" + (end - headPixels) + "," + y1 +
+             "H" + start + "Z";
+    } else {
+      return "M" + (start + headPixels) + "," + y0 +
+             "H" + end +
+             "V" + y1 +
+             "H" + (start + headPixels) +
+             "L" + start + "," + mid + "Z";
+    }
+  }
+
+  function fillColor(d) {
+    return categoryColors[d.category] || d.color || "#c9c9c9";
+  }
+
+  // Draw genes
+  svg.selectAll(".gene")
+    .data(data)
+    .enter()
+    .append("path")
+    .attr("class", "gene")
+    .attr("d", genePath)
+    .attr("fill", fillColor)
+    .on("mouseover", function(event, d) {
+      tooltip.transition().duration(150).style("opacity", 0.95);
+      tooltip.html("<b>" + (d.label || "feature") + "</b>" +
+        "<br>category: " + (d.category || "n/a") +
+        "<br>phrog: " + (d.phrog || "n/a") +
+        "<br>score: " + (d.score || "n/a") +
+        "<br>e-value: " + (d.eval || "n/a"))
+        .style("left", (event.pageX + 10) + "px")
+        .style("top", (event.pageY - 28) + "px");
+    })
+    .on("mousemove", function(event) {
+      tooltip.style("left", (event.pageX + 10) + "px")
+             .style("top", (event.pageY - 28) + "px");
+    })
+    .on("mouseout", function() {
+      tooltip.transition().duration(300).style("opacity", 0);
+    });
+
+  // Labels
+  svg.selectAll(".label")
+    .data(data.filter(function(d) {
+      return d.label && d.label.toLowerCase() !== "unknown function";
+    }))
+    .enter()
+    .append("text")
+    .attr("class", "label")
+    .attr("x", function(d) { return (x(d.start) + x(d.end)) / 2; })
+    .attr("y", function(d) {
+      const cy = d.strand === 1 ? forwardY : reverseY;
+      return d.strand === 1 ? cy - featureHeight / 2 - 4 : cy + featureHeight / 2 + 12;
+    })
+    .attr("text-anchor", "middle")
+    .text(function(d) { return d.label; });
+
+  // Legend
+  const legendItems = Object.entries(categoryColors);
+  if (legendItems.length > 0) {
+    const legend = svg.append("g")
+      .attr("class", "legend")
+      .attr("transform", "translate(" + (width + 20) + ",20)");
+
+    legend.append("text")
+      .attr("class", "legend-title")
+      .attr("x", 0)
+      .attr("y", 0)
+      .text("Category");
+    const rows = legend.selectAll(".legend-item")
+      .data(legendItems)
+      .enter()
+      .append("g")
+      .attr("class", "legend-item")
+      .attr("transform", function(d, i) { return "translate(0," + ((i + 1) * legendRowHeight) + ")"; });
+
+    rows.append("rect")
+      .attr("width", 12)
+      .attr("height", 12)
+      .attr("fill", function(d) { return d[1]; })
+      .attr("class", "legend-box");
+
+    rows.append("foreignObject")
+      .attr("x", 18)
+      .attr("y", -2)
+      .attr("width", 170)
+      .attr("height", legendRowHeight)
+      .append("xhtml:div")
+      .attr("class", "legend-label")
+      .text(function(d) { return d[0]; });
+  }
+})();
+</script>
+</body>
+</html>
+"""
 
 
 def _write_interactive_plot(
     record: Any,
     plots_dir: Path,
     contig_length: int,
+    category_colors: dict[str, str],
 ) -> None:
-    """Write an interactive Plotly HTML genome map for a contig.
+    """Write an interactive D3.js HTML genome map for a contig.
 
-    Mimics the static PDF style: a single horizontal track of arrow-shaped
-    features with labels above them and a position axis below.
+    Genes are drawn on two tracks: forward strand above and reverse strand
+    below. A category color legend and hover tooltips are included.
     """
-    feature_height = 0.25
-    arrow_head_bp = max(150, int(contig_length * 0.006))
-    label_y = 0.42
-    min_label_width = int(contig_length * 0.012)
+    features = [_feature_to_dict(f) for f in record.features]
+    features.sort(key=lambda f: (f["start"], f["end"]))
 
-    shape_traces = []
-    label_traces = []
+    present_categories = {f["category"] for f in features if f["category"]}
+    ordered_colors = {
+        cat: color for cat, color in category_colors.items() if cat in present_categories
+    }
 
-    # Simple greedy label collision avoidance: each placed label occupies a
-    # [start, end] x-interval; skip labels that would overlap a previous one.
-    placed_labels: list[tuple[int, int]] = []
+    features_json = json.dumps(features)
+    colors_json = json.dumps(ordered_colors)
 
-    def _draw_arrow(feature: Any) -> None:
-        start = int(feature.location.start)
-        end = int(feature.location.end)
-        strand = feature.location.strand or 1
-        width = end - start
-        color = feature.qualifiers.get("color", "#c9c9c9")
-        if isinstance(color, list):
-            color = color[0]
-
-        head = min(arrow_head_bp, width // 2)
-        y0, y1 = -feature_height / 2, feature_height / 2
-        mid = 0.0
-
-        if strand == 1:
-            # Rectangle + right-pointing arrowhead.
-            x = [
-                start,
-                end - head,
-                end,
-                end - head,
-                start,
-                start,
-            ]
-            y = [y0, y0, mid, y1, y1, y0]
-        else:
-            # Left-pointing arrowhead + rectangle.
-            x = [
-                start + head,
-                end,
-                end,
-                start + head,
-                start,
-                start + head,
-            ]
-            y = [y0, y0, y1, y1, mid, y0]
-
-        hover_text = _plotly_hover_text(feature, record.id)
-
-        shape_traces.append(
-            go.Scatter(
-                x=x,
-                y=y,
-                fill="toself",
-                fillcolor=color,
-                line={"color": "#333333", "width": 1},
-                mode="lines",
-                text=hover_text,
-                hoverinfo="text",
-                showlegend=False,
-            )
-        )
-
-        label = feature.qualifiers.get("label", "")
-        if isinstance(label, list):
-            label = label[0] if label else ""
-        label = str(label)
-        if not label or label.lower() == "unknown function":
-            return
-        if width < min_label_width:
-            return
-
-        label_center = (start + end) // 2
-        label_start = start
-        label_end = end
-        for placed_start, placed_end in placed_labels:
-            if label_end > placed_start and label_start < placed_end:
-                return
-        placed_labels.append((label_start, label_end))
-
-        label_traces.append(
-            go.Scatter(
-                x=[label_center],
-                y=[label_y],
-                mode="text",
-                text=[label],
-                textposition="middle center",
-                textfont={"size": 10, "color": "#000000"},
-                hoverinfo="skip",
-                showlegend=False,
-            )
-        )
-
-    for feature in record.features:
-        _draw_arrow(feature)
-
-    fig = go.Figure(data=shape_traces + label_traces)
-
-    fig.update_layout(
-        title={"text": record.id, "x": 0.5, "xanchor": "center"},
-        xaxis_title="Position (bp)",
-        xaxis={
-            "range": [-contig_length * 0.01, contig_length * 1.01],
-            "zeroline": False,
-            "showgrid": True,
-            "gridcolor": "#eeeeee",
-            "side": "bottom",
-        },
-        yaxis={
-            "range": [-0.55, 0.55],
-            "zeroline": False,
-            "showgrid": False,
-            "showticklabels": False,
-            "fixedrange": True,
-        },
-        hovermode="closest",
-        plot_bgcolor="white",
-        height=300,
-        width=max(1000, min(1800, int(contig_length / 35))),
-        margin={"l": 60, "r": 40, "t": 55, "b": 55},
-        dragmode="pan",
+    safe_title = html.escape(record.id)
+    html_content = (
+        _D3_HTML_TEMPLATE
+        .replace("__TITLE__", safe_title)
+        .replace("__FEATURES_JSON__", features_json)
+        .replace("__COLORS_JSON__", colors_json)
+        .replace("__CONTIG_LENGTH__", str(contig_length))
     )
-    fig.update_xaxes(rangeslider_visible=False)
+
     out_path = plots_dir / f"{record.id}.html"
-    fig.write_html(str(out_path), include_plotlyjs="cdn")
+    out_path.write_text(html_content, encoding="utf-8")
 
 
 def _write_static_plot(
     record: Any,
     plots_dir: Path,
     format: str,
+    category_colors: dict[str, str],
 ) -> None:
-    """Write a static matplotlib genome map for a contig."""
+    """Write a static matplotlib genome map for a contig with a category legend."""
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
 
     graphic_record = BiopythonTranslator().translate_record(record)
     for feat in graphic_record.features:
@@ -293,6 +414,28 @@ def _write_static_plot(
         figure_height=3,
     )
     ax.set_title(record.id)
+
+    present_categories = {
+        _qualifier_to_str(f.qualifiers.get("category"))
+        for f in record.features
+        if _qualifier_to_str(f.qualifiers.get("category"))
+    }
+    if present_categories:
+        legend_handles = [
+            Patch(facecolor=color, edgecolor="#333333", label=category)
+            for category, color in category_colors.items()
+            if category in present_categories
+        ]
+        if legend_handles:
+            ax.legend(
+                handles=legend_handles,
+                loc="upper left",
+                bbox_to_anchor=(1.01, 1.0),
+                title="Category",
+                frameon=True,
+            )
+            fig.subplots_adjust(right=0.82)
+
     out_path = plots_dir / f"{record.id}.{format}"
     ax.figure.savefig(str(out_path), bbox_inches="tight", format=format)
     plt.clf()
@@ -370,6 +513,7 @@ def generate_plots_and_annotations(
     phrogs_anno = pd.read_table(meta_dir)
     phrogs_anno = phrogs_anno.fillna("unknown function")
     phrogs_anno["phrog"] = phrogs_anno["phrog"].apply(lambda x: f"phrog_{x}")
+    category_colors = dict(zip(phrogs_anno["category"], phrogs_anno["color"]))
 
     results_with_annotate = search_results.merge(
         phrogs_anno, how="inner", left_on="tname", right_on="phrog"
@@ -407,6 +551,7 @@ def generate_plots_and_annotations(
                     feature.qualifiers.update({"phrog": tmp_feature["phrog"].values[0]})
                 else:
                     feature.qualifiers.update({"label": "unknown function"})
+                    feature.qualifiers.update({"category": "unknown"})
                     feature.qualifiers.update({"color": "#c9c9c9"})
 
             if trna is not None:
@@ -422,11 +567,11 @@ def generate_plots_and_annotations(
             contig_length = _contig_length(record)
 
             if "html" in requested_formats:
-                _write_interactive_plot(record, plots_dir, contig_length)
+                _write_interactive_plot(record, plots_dir, contig_length, category_colors)
 
             static_formats = requested_formats & {"pdf", "png"}
             for fmt in static_formats:
-                _write_static_plot(record, plots_dir, fmt)
+                _write_static_plot(record, plots_dir, fmt, category_colors)
 
     # Write per-format sentinel files so workflow engines can depend on
     # specific formats rather than the whole plots directory.
