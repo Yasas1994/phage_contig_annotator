@@ -209,66 +209,100 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   .legend-box { stroke: #333; stroke-width: 1px; }
   .legend-title { font-weight: bold; font-size: 13px; }
   .legend-label { font-size: 12px; line-height: 1.2; word-wrap: break-word; color: #000; }
-  #annotation-table { margin-top: 30px; max-width: 100%; overflow-x: auto; }
-  #annotation-table h4 { margin-bottom: 10px; }
-  #annotation-table table { border-collapse: collapse; width: 100%; font-size: 12px; }
-  #annotation-table th, #annotation-table td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; white-space: nowrap; }
-  #annotation-table th { background: #f5f5f5; font-weight: bold; }
-  #annotation-table tr { background-color: var(--row-bg, #fff); }
-  #annotation-table tr:nth-child(even) { background-color: var(--row-bg, #fafafa); }
-  #annotation-table tr:hover { background-color: #eef; }
-  #annotation-table tr.annotation-row-highlight { background-color: #ffeb3b !important; }
-  .pagination { margin-top: 10px; }
-  .pagination button { margin: 0 5px; padding: 4px 8px; }
-  .pagination .page-info { margin: 0 10px; }
-  .zoom-hint { font-size: 11px; color: #666; margin-left: auto; }
-  #cell-modal {
-    display: none;
-    position: fixed;
-    z-index: 1000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.35);
-    align-items: center;
-    justify-content: center;
-  }
-  #cell-modal.visible { display: flex; }
-  #cell-modal-content {
-    background: #fff;
-    border: 1px solid #999;
-    border-radius: 6px;
-    max-width: 80vw;
-    max-height: 80vh;
-    overflow: auto;
-    padding: 16px 20px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-  }
-  #cell-modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-    border-bottom: 1px solid #ddd;
-    padding-bottom: 8px;
-  }
-  #cell-modal-title { font-weight: bold; font-size: 14px; margin: 0; }
-  #cell-modal-close {
-    background: none;
-    border: none;
-    font-size: 18px;
-    line-height: 1;
-    cursor: pointer;
-    color: #555;
-  }
-  #cell-modal-close:hover { color: #000; }
-  #cell-modal-value {
+  #annotation-table { margin-top: 28px; }
+  #annotation-table h4 {
+    margin: 0 0 10px 0;
     font-size: 13px;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    font-family: inherit;
+    font-weight: 600;
+    color: #444;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
+  .table-wrap {
+    border: 0.5px solid #d3d1c7;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+  }
+  #annotation-table table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 12px;
+  }
+  #annotation-table th {
+    background: #f0efea;
+    font-weight: 600;
+    font-size: 11px;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 0.5px solid #d3d1c7;
+    white-space: nowrap;
+  }
+  #annotation-table td {
+    padding: 7px 10px;
+    text-align: left;
+    border-bottom: 0.5px solid #ebebea;
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: top;
+    cursor: pointer;
+  }
+  #annotation-table td.expanded {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    max-width: none;
+    background: #f0f4ff;
+    border-radius: 0;
+    word-break: break-word;
+  }
+  #annotation-table td[title]:not([title="-"]):not([title=""]):hover { background: #f5f5f3; }
+  #annotation-table tr:last-child td { border-bottom: none; }
+  #annotation-table tr { background-color: var(--row-bg, #fff); transition: background 0.1s; }
+  #annotation-table tr:nth-child(even) { background-color: var(--row-bg-even, #fafaf9); }
+  #annotation-table tr:hover td:not(.expanded) { background: rgba(0,0,0,0.03); }
+  #annotation-table tr.annotation-row-highlight td { background: #fff8c5 !important; }
+  td.truncatable { position: relative; }
+  td.truncatable::after {
+    content: "↔";
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 9px;
+    color: #bbb;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  td.truncatable:hover::after { opacity: 1; }
+  td.truncatable.expanded::after { display: none; }
+  .pagination {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #666;
+  }
+  .pagination button {
+    padding: 4px 10px;
+    font-size: 12px;
+    border: 0.5px solid #c0bfb8;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    color: #1a1a18;
+  }
+  .pagination button:hover:not(:disabled) { background: #ebebea; }
+  .pagination button:disabled { opacity: 0.4; cursor: default; }
+  .pagination .page-info { margin: 0 4px; }
+  .zoom-hint { font-size: 11px; color: #666; margin-left: auto; }
   /* ── Report header ────────────────────────────────────────── */
   .ph-header {
     font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
@@ -418,16 +452,6 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
 <div id="overview"></div>
 <div id="chart"></div>
 <div id="annotation-table"></div>
-
-<div id="cell-modal">
-  <div id="cell-modal-content">
-    <div id="cell-modal-header">
-      <span id="cell-modal-title"></span>
-      <button id="cell-modal-close" title="Close">×</button>
-    </div>
-    <pre id="cell-modal-value"></pre>
-  </div>
-</div>
 
 <script>
 (function() {
@@ -862,11 +886,13 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const tableContainer = d3.select("#annotation-table");
   tableContainer.append("h4")
     .text("Annotations");
-  const table = tableContainer.append("table").append("thead").append("tr");
+  const tableWrap = tableContainer.append("div").attr("class", "table-wrap");
+  const table = tableWrap.append("table");
+  const theadRow = table.append("thead").append("tr");
   tableColumns.forEach(function(col) {
-    table.append("th").text(col.header);
+    theadRow.append("th").text(col.header);
   });
-  const tbody = tableContainer.select("table").append("tbody");
+  const tbody = table.append("tbody");
   const paginationDiv = tableContainer.append("div").attr("class", "pagination");
   paginationDiv.append("button")
     .attr("id", "page-prev")
@@ -898,49 +924,35 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     return data.filter(function(d) { return d.phrog || d.trna_type; });
   }
 
-  const cellModal = d3.select("#cell-modal");
-  const cellModalTitle = d3.select("#cell-modal-title");
-  const cellModalValue = d3.select("#cell-modal-value");
-  const cellModalClose = d3.select("#cell-modal-close");
+  // Columns that often contain long text and benefit from expand-on-click.
+  const expandableCols = new Set([
+    "hostDomain", "RefSeq", "Pfam_hit", "GO_hit", "KO_hit", "label", "category"
+  ]);
 
-  function openCellModal(header, value) {
-    cellModalTitle.text(header);
-    cellModalValue.text(value === "-" ? "" : value);
-    cellModal.classed("visible", true);
-  }
-
-  function closeCellModal() {
-    cellModal.classed("visible", false);
-  }
-
-  cellModalClose.on("click", function(event) {
-    event.stopPropagation();
-    closeCellModal();
-  });
-
-  cellModal.on("click", function(event) {
-    if (event.target.id === "cell-modal") closeCellModal();
-  });
-
-  document.addEventListener("keydown", function(event) {
-    if (event.key === "Escape") closeCellModal();
-  });
-
-  // Delegated click handler for table cells: clicking a cell opens a modal
-  // showing the full value for that column.  The row click still highlights
-  // the feature on the plot.
+  // Click on a cell: toggle expand for truncatable columns, otherwise
+  // highlight the corresponding feature on the gene map.
   tbody.on("click", function(event) {
     const cell = event.target.closest("td");
     if (!cell) return;
-    event.stopPropagation();
-    const row = cell.parentNode;
-    const d = row.__data__;
     const colKey = cell.getAttribute("data-col");
-    if (!d || !colKey) return;
-    let val = d[colKey];
-    if (val === undefined || val === null || val === "") val = "-";
-    const col = tableColumns.find(function(c) { return c.key === colKey; });
-    openCellModal(col ? col.header : colKey, val);
+    if (expandableCols.has(colKey)) {
+      const val = cell.getAttribute("data-fullval");
+      if (val && val !== "-") {
+        event.stopPropagation();
+        const isExpanded = cell.classList.toggle("expanded");
+        if (isExpanded) {
+          cell.textContent = val;
+        } else {
+          const short = val.length > 30 ? val.slice(0, 28) + "…" : val;
+          cell.textContent = short;
+          cell.classList.add("truncatable");
+        }
+        return;
+      }
+    }
+    const row = cell.closest("tr");
+    const d = row && row.__data__;
+    if (d) highlightFeature(d._idx);
   });
 
   function renderTable() {
@@ -948,18 +960,11 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     const pageData = tData.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage);
     const rows = tbody.selectAll("tr").data(pageData, function(d) { return d._idx; });
     rows.exit().remove();
-    const rowsEnter = rows.enter().append("tr")
-      .style("cursor", "pointer")
-      .on("click", function(event, d) {
-        d3.selectAll(".gene").classed("selected", false);
-        d3.select('.gene[data-index="' + d._idx + '"]').classed("selected", true);
-        highlightFeature(d._idx);
-      });
+    const rowsEnter = rows.enter().append("tr").style("cursor", "pointer");
     const allRows = rowsEnter.merge(rows);
     allRows
       .style("--row-bg", function(d) {
-        const col = categoryColors[d.category] || d.color || "#ffffff";
-        return pastelColor(col);
+        return pastelColor(categoryColors[d.category] || d.color || "#ffffff");
       })
       .each(function(d) {
         const row = d3.select(this);
@@ -967,11 +972,17 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
         tableColumns.forEach(function(col) {
           let val = d[col.key];
           if (val === undefined || val === null || val === "") val = "-";
-          row.append("td")
+          const strVal = String(val);
+          const isExpandable = expandableCols.has(col.key) && strVal !== "-";
+          const isTruncated = isExpandable && strVal.length > 30;
+          const displayVal = isTruncated ? strVal.slice(0, 28) + "…" : strVal;
+          const td = row.append("td")
             .attr("data-col", col.key)
-            .attr("title", val)
-            .style("cursor", "cell")
-            .text(val);
+            .attr("data-fullval", strVal)
+            .attr("title", isExpandable ? "Click to expand" : null)
+            .style("cursor", isExpandable ? "pointer" : "default")
+            .text(displayVal);
+          if (isTruncated) td.classed("truncatable", true);
         });
       });
   }
@@ -988,9 +999,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
 
   function highlightFeature(index) {
     const feature = data[index];
-    const startBp = feature.start;
-    const endBp = feature.end;
-    const centerBp = (startBp + endBp) / 2;
+    const centerBp = (feature.start + feature.end) / 2;
     const visibleSpan = currentXScale.invert(width) - currentXScale.invert(0);
     // If feature is outside the visible window, center on it.
     if (centerBp < currentXScale.invert(0) || centerBp > currentXScale.invert(width) || visibleSpan > contigLength * 0.9) {
@@ -999,6 +1008,8 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
       const newTransform = d3.zoomIdentity.translate(tx, 0).scale(targetK);
       overlay.call(zoom.transform, clampTransform(newTransform));
     }
+    d3.selectAll(".gene").classed("selected", false);
+    d3.select('.gene[data-index="' + index + '"]').classed("selected", true);
     highlightTableRow(index);
   }
 
