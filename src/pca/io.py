@@ -55,10 +55,10 @@ def get_compressed_file_handle(path: str | os.PathLike[str]) -> TextIO:
 
 
 def read_fasta(path: str | os.PathLike[str]) -> Iterator[tuple[str, str]]:
-    """Yield (header, sequence) tuples from a possibly compressed FASTA file."""
+    """Yield (sequence id, sequence) tuples from a possibly compressed FASTA file."""
     with get_compressed_file_handle(path) as handle:
         for record in SeqIO.parse(handle, "fasta"):
-            name = record.description
+            name = record.id
             seq = str(record.seq).upper()
             if name and seq:
                 yield name, seq
