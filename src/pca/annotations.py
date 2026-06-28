@@ -274,8 +274,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
     border-radius: 12px;
     overflow: hidden;
-    max-width: 860px;
-    margin: 0 auto 20px auto;
+    margin-bottom: 20px;
   }
   .ph-topbar {
     display: flex;
