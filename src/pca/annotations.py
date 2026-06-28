@@ -220,6 +220,53 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   .pagination button { margin: 0 5px; padding: 4px 8px; }
   .pagination .page-info { margin: 0 10px; }
   .zoom-hint { font-size: 11px; color: #666; margin-left: auto; }
+  #cell-modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.35);
+    align-items: center;
+    justify-content: center;
+  }
+  #cell-modal.visible { display: flex; }
+  #cell-modal-content {
+    background: #fff;
+    border: 1px solid #999;
+    border-radius: 6px;
+    max-width: 80vw;
+    max-height: 80vh;
+    overflow: auto;
+    padding: 16px 20px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  }
+  #cell-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 8px;
+  }
+  #cell-modal-title { font-weight: bold; font-size: 14px; margin: 0; }
+  #cell-modal-close {
+    background: none;
+    border: none;
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    color: #555;
+  }
+  #cell-modal-close:hover { color: #000; }
+  #cell-modal-value {
+    font-size: 13px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-family: inherit;
+  }
 </style>
 </head>
 <body>
@@ -237,6 +284,17 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
 <div id="overview"></div>
 <div id="chart"></div>
 <div id="annotation-table"></div>
+
+<div id="cell-modal">
+  <div id="cell-modal-content">
+    <div id="cell-modal-header">
+      <span id="cell-modal-title"></span>
+      <button id="cell-modal-close" title="Close">×</button>
+    </div>
+    <pre id="cell-modal-value"></pre>
+  </div>
+</div>
+
 <script>
 (function() {
   const data = __FEATURES_JSON__;
@@ -706,6 +764,51 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     return data.filter(function(d) { return d.phrog || d.trna_type; });
   }
 
+  const cellModal = d3.select("#cell-modal");
+  const cellModalTitle = d3.select("#cell-modal-title");
+  const cellModalValue = d3.select("#cell-modal-value");
+  const cellModalClose = d3.select("#cell-modal-close");
+
+  function openCellModal(header, value) {
+    cellModalTitle.text(header);
+    cellModalValue.text(value === "-" ? "" : value);
+    cellModal.classed("visible", true);
+  }
+
+  function closeCellModal() {
+    cellModal.classed("visible", false);
+  }
+
+  cellModalClose.on("click", function(event) {
+    event.stopPropagation();
+    closeCellModal();
+  });
+
+  cellModal.on("click", function(event) {
+    if (event.target.id === "cell-modal") closeCellModal();
+  });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") closeCellModal();
+  });
+
+  // Delegated click handler for table cells: clicking a cell opens a modal
+  // showing the full value for that column.  The row click still highlights
+  // the feature on the plot.
+  tbody.on("click", function(event) {
+    const cell = event.target.closest("td");
+    if (!cell) return;
+    event.stopPropagation();
+    const row = cell.parentNode;
+    const d = row.__data__;
+    const colKey = cell.getAttribute("data-col");
+    if (!d || !colKey) return;
+    let val = d[colKey];
+    if (val === undefined || val === null || val === "") val = "-";
+    const col = tableColumns.find(function(c) { return c.key === colKey; });
+    openCellModal(col ? col.header : colKey, val);
+  });
+
   function renderTable() {
     const tData = tableData();
     const pageData = tData.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage);
@@ -730,7 +833,11 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
         tableColumns.forEach(function(col) {
           let val = d[col.key];
           if (val === undefined || val === null || val === "") val = "-";
-          row.append("td").text(val);
+          row.append("td")
+            .attr("data-col", col.key)
+            .attr("title", val)
+            .style("cursor", "cell")
+            .text(val);
         });
       });
   }
