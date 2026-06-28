@@ -221,7 +221,8 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   .table-wrap {
     border: 0.5px solid #d3d1c7;
     border-radius: 10px;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     background: #fff;
   }
   #annotation-table table {
@@ -245,43 +246,34 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     padding: 7px 10px;
     text-align: left;
     border-bottom: 0.5px solid #ebebea;
-    max-width: 160px;
+    max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     vertical-align: top;
     cursor: pointer;
   }
-  #annotation-table td.expanded {
+  #annotation-table td[data-col="hostDomain"],
+  #annotation-table td[data-col="RefSeq"],
+  #annotation-table td[data-col="Pfam_hit"],
+  #annotation-table td[data-col="GO_hit"],
+  #annotation-table td[data-col="KO_hit"],
+  #annotation-table td[data-col="label"],
+  #annotation-table td[data-col="category"] {
     white-space: normal;
+    word-break: break-word;
+    min-width: 220px;
+    max-width: 380px;
     overflow: visible;
     text-overflow: unset;
-    max-width: none;
-    background: #f0f4ff;
-    border-radius: 0;
-    word-break: break-word;
   }
-  #annotation-table td[title]:not([title="-"]):not([title=""]):hover { background: #f5f5f3; }
   #annotation-table tr:last-child td { border-bottom: none; }
   #annotation-table tr { background-color: var(--row-bg, #fff); transition: background 0.1s; }
   #annotation-table tr:nth-child(even) { background-color: var(--row-bg-even, #fafaf9); }
-  #annotation-table tr:hover td:not(.expanded) { background: rgba(0,0,0,0.03); }
-  #annotation-table tr.annotation-row-highlight td { background: #fff8c5 !important; }
-  td.truncatable { position: relative; }
-  td.truncatable::after {
-    content: "↔";
-    position: absolute;
-    right: 4px;
-    top: 50%;
-    transform: translateY(-50%);
-    font-size: 9px;
-    color: #bbb;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.15s;
+  #annotation-table tr:not(.annotation-row-highlight):hover td { background: rgba(0,0,0,0.03); }
+  #annotation-table tr.annotation-row-highlight td {
+    box-shadow: inset 0 0 0 1000px rgba(255, 255, 255, 0.5);
   }
-  td.truncatable:hover::after { opacity: 1; }
-  td.truncatable.expanded::after { display: none; }
   .pagination {
     margin-top: 10px;
     display: flex;
@@ -924,32 +916,10 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     return data.filter(function(d) { return d.phrog || d.trna_type; });
   }
 
-  // Columns that often contain long text and benefit from expand-on-click.
-  const expandableCols = new Set([
-    "hostDomain", "RefSeq", "Pfam_hit", "GO_hit", "KO_hit", "label", "category"
-  ]);
-
-  // Click on a cell: toggle expand for truncatable columns, otherwise
-  // highlight the corresponding feature on the gene map.
+  // Click any table cell to highlight the corresponding feature on the map.
   tbody.on("click", function(event) {
     const cell = event.target.closest("td");
     if (!cell) return;
-    const colKey = cell.getAttribute("data-col");
-    if (expandableCols.has(colKey)) {
-      const val = cell.getAttribute("data-fullval");
-      if (val && val !== "-") {
-        event.stopPropagation();
-        const isExpanded = cell.classList.toggle("expanded");
-        if (isExpanded) {
-          cell.textContent = val;
-        } else {
-          const short = val.length > 30 ? val.slice(0, 28) + "…" : val;
-          cell.textContent = short;
-          cell.classList.add("truncatable");
-        }
-        return;
-      }
-    }
     const row = cell.closest("tr");
     const d = row && row.__data__;
     if (d) highlightFeature(d._idx);
@@ -972,17 +942,9 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
         tableColumns.forEach(function(col) {
           let val = d[col.key];
           if (val === undefined || val === null || val === "") val = "-";
-          const strVal = String(val);
-          const isExpandable = expandableCols.has(col.key) && strVal !== "-";
-          const isTruncated = isExpandable && strVal.length > 30;
-          const displayVal = isTruncated ? strVal.slice(0, 28) + "…" : strVal;
-          const td = row.append("td")
+          row.append("td")
             .attr("data-col", col.key)
-            .attr("data-fullval", strVal)
-            .attr("title", isExpandable ? "Click to expand" : null)
-            .style("cursor", isExpandable ? "pointer" : "default")
-            .text(displayVal);
-          if (isTruncated) td.classed("truncatable", true);
+            .text(String(val));
         });
       });
   }
