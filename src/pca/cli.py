@@ -39,19 +39,37 @@ def _write_config(config: configparser.ConfigParser) -> None:
 
 
 def _discover_databases(db_dir: str) -> tuple[dict[str, str], str | None]:
-    """Return discovered HMM databases and the PHROG metadata path."""
+    """Return discovered HMM databases and the PHROG metadata path.
+
+    Supports both the expected packaged layout (``hmmerdb*`` directories and a
+    ``meta`` directory containing ``phrog_annot_v4.tsv``) and flat layouts
+    produced by older extraction code.
+    """
+    db_path = Path(db_dir)
     hmmerdb: dict[str, str] = {}
     meta_path: str | None = None
 
-    for path in Path(db_dir).glob("*"):
-        path_str = str(path)
-        if "hmmerdb" in path_str:
-            db_name = path.name.split("_")[0]
-            hmmerdb[db_name] = path_str
-        if "meta" in path_str:
-            candidates = list(path.glob("phrog_annot_v4.tsv"))
-            if candidates:
-                meta_path = str(candidates[0])
+    # Locate metadata TSV anywhere under db_dir.
+    meta_candidates = list(db_path.rglob("phrog_annot_v4.tsv"))
+    if meta_candidates:
+        meta_path = str(meta_candidates[0])
+
+    # Locate HMM files and group them by their parent directory.
+    hmm_paths = list(db_path.rglob("*.hmm"))
+    if not hmm_paths:
+        return hmmerdb, meta_path
+
+    for hmm_file in hmm_paths:
+        parent = hmm_file.parent
+        parent_name = parent.name
+        # Prefer directories that look like the packaged hmmerdb splits.
+        if "hmmerdb" in parent_name:
+            db_name = parent_name.split("_")[0]
+        elif parent == db_path:
+            db_name = "hmmerdb"
+        else:
+            db_name = parent.stem
+        hmmerdb[db_name] = str(parent)
 
     return hmmerdb, meta_path
 
@@ -93,15 +111,70 @@ def download_dbs(path: str) -> bool:
                 file.write(chunk)
     pbar.close()
 
+    base_path = Path(path).resolve()
     with tarfile.open(tar_file_path, "r:gz") as tar:
         for member in tar.getmembers():
-            member.name = os.path.basename(member.name) or member.name
+            # Strip any leading path components and reject unsafe members.
+            member_path = Path(member.name)
+            if not member.isfile():
+                continue
+            if any(part == ".." for part in member_path.parts):
+                continue
+            if member_path.is_absolute():
+                continue
+            # Resolve relative to the target directory to prevent traversal.
+            target = (base_path / member_path).resolve()
+            if not str(target).startswith(str(base_path)):
+                continue
+            member.name = str(member_path)
         tar.extractall(path=path)
+
+    _normalize_database_dir(path)
 
     tar_file_path.unlink()
     click.echo(f"Database downloaded and extracted to {path}")
     checkpoint.touch()
     return True
+
+
+def _normalize_database_dir(path: str) -> None:
+    """Organize extracted database files into a predictable layout.
+
+    Moves loose ``.hmm`` files into a ``hmmerdb/`` directory and the PHROG
+    metadata TSV into a ``meta/`` directory when they are not already there.
+    """
+    db_path = Path(path)
+    hmmerdb_dir = db_path / "hmmerdb"
+    meta_dir = db_path / "meta"
+
+    # Gather loose .hmm files (those not already under a hmmerdb* directory).
+    loose_hmms = [
+        p for p in db_path.rglob("*.hmm")
+        if "hmmerdb" not in p.parent.name
+    ]
+    if loose_hmms:
+        hmmerdb_dir.mkdir(exist_ok=True)
+        for hmm_file in loose_hmms:
+            dest = hmmerdb_dir / hmm_file.name
+            if dest != hmm_file:
+                hmm_file.rename(dest)
+
+    # Gather loose metadata TSVs.
+    meta_files = [p for p in db_path.rglob("phrog_annot_v4.tsv") if p.parent != meta_dir]
+    if meta_files:
+        meta_dir.mkdir(exist_ok=True)
+        for meta_file in meta_files:
+            dest = meta_dir / meta_file.name
+            if dest != meta_file:
+                meta_file.rename(dest)
+
+    # Remove empty directories left behind after moving files.
+    for subdir in sorted(db_path.iterdir(), reverse=True):
+        if subdir.is_dir() and subdir not in (hmmerdb_dir, meta_dir):
+            try:
+                subdir.rmdir()
+            except OSError:
+                pass
 
 
 @click.group(invoke_without_command=True)
@@ -197,9 +270,15 @@ def runall(
 
     hmmerdb, meta_path = _discover_databases(str(db_dir))
     if not hmmerdb:
-        raise click.UsageError(f"No HMM databases found in {db_dir}")
+        raise click.UsageError(
+            f"No HMM databases found in {db_dir}. "
+            "Run 'phage_contig_annotator download-db' first."
+        )
     if meta_path is None:
-        raise click.UsageError(f"PHROG metadata not found in {db_dir}")
+        raise click.UsageError(
+            f"PHROG metadata not found in {db_dir}. "
+            "Run 'phage_contig_annotator download-db' first."
+        )
 
     if not skip_trna:
         validation.check_executables(["tRNAscan-SE"])
@@ -210,7 +289,7 @@ def runall(
         "input": str(input_path.resolve()),
         "input_type": input_type,
         "output_dir": str(output_dir.resolve()),
-        "db_dir": str(Path(next(iter(hmmerdb.values()))).resolve()),
+        "db_dir": str(db_dir.resolve()),
         "meta_path": str(Path(meta_path).resolve()),
         "run_trna": not skip_trna,
         "plot_formats": list(plot_formats),

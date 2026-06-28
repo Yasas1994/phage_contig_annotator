@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 
 
 def _iter_hmms(db_dir: Path) -> Iterator[HMM]:
-    """Yield HMMs from every ``.hmm`` file in ``db_dir``."""
-    for path in sorted(db_dir.glob("*.hmm")):
+    """Yield HMMs from every ``.hmm`` file under ``db_dir``."""
+    for path in sorted(db_dir.rglob("*.hmm")):
         with HMMFile(path) as hmm_file:
             yield from hmm_file
 
