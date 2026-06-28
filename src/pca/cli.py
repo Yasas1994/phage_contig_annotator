@@ -23,7 +23,7 @@ def _package_dir() -> Path:
     return Path(__file__).parent.resolve()
 
 
-_DEFAULT_DB_DIR: Path = _package_dir().parent / "databases"
+_DEFAULT_DB_DIR: Path = _package_dir().parents[1] / "databases"
 
 
 def _load_config() -> configparser.ConfigParser:
