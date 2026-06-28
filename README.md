@@ -62,19 +62,36 @@ conda activate phage_contig_annot
 phage_contig_annotator runall --input test/bin.460.fna --output output_dir --cpus 10
 ```
 
-To skip tRNA prediction:
+By default the pipeline produces:
+
+- `annotations.gff` — annotated contigs in GFF3 format
+- `annotations.gbk` — annotated contigs in GenBank format
+- `plots/*.pdf` — static genome maps (one per contig)
+
+### Output options
+
+Generate **interactive HTML** plots in addition to PDFs:
+
+```bash
+phage_contig_annotator runall --input test/bin.460.fna --output output_dir --cpus 10 \
+  --plot-format pdf --plot-format html
+```
+
+Other plot formats: `pdf` (default), `png`, `html`. Specify `--plot-format` multiple times for multiple formats.
+
+Skip tRNA prediction:
 
 ```bash
 phage_contig_annotator runall --input test/bin.460.fna --output output_dir --cpus 10 --skip-trna
 ```
 
-To run on an existing protein FASTA:
+Run on an existing protein FASTA:
 
 ```bash
 phage_contig_annotator runall --input proteins.faa --output output_dir --type proteins --cpus 10
 ```
 
-To preview the Snakemake execution plan without running:
+Preview the Snakemake execution plan without running:
 
 ```bash
 phage_contig_annotator runall --input test/bin.460.fna --output output_dir --cpus 10 --dry-run

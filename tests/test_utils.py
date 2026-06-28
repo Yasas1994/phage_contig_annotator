@@ -226,3 +226,95 @@ class TestPyhmmer:
         assert len(rows) >= 1
         assert rows[0]["qname"] == "seq1"
         assert rows[0]["tname"] == "test_hmm"
+
+
+class TestAnnotations:
+    def test_generate_plots_and_annotations_default_pdf_and_genbank(
+        self, tmp_path: Path
+    ) -> None:
+        from Bio import SeqIO
+
+        from pca.annotations import generate_plots_and_annotations
+
+        # Create a minimal protein GFF and matching FASTA
+        fna = tmp_path / "input.fna"
+        fna.write_text(">contig1\n" + "ATG" * 300 + "TAA\n")
+
+        proteins_gff = tmp_path / "proteins.gff"
+        proteins_gff.write_text(
+            "##gff-version 3\n"
+            "##sequence-region contig1 1 903\n"
+            "contig1\tpyrodigal\tCDS\t1\t903\t100.0\t+\t0\tID=contig1_1\n"
+        )
+
+        hmmsearch_txt = tmp_path / "hmmsearch.txt"
+        hmmsearch_txt.write_text(
+            "contig1_1\t-\tphrog_1\t-\t1e-10\t100.0\t0.0\t1e-5\t50.0\t0.0\n"
+        )
+
+        meta = tmp_path / "meta.tsv"
+        meta.write_text("phrog\tcategory\tcolor\tannot\n1\tunknown\t#c9c9c9\ttest\n")
+
+        trna_gff = tmp_path / "trna.gff"
+        trna_gff.write_text("##gff-version 3\n")
+
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+
+        generate_plots_and_annotations(
+            tmp_dir=out_dir,
+            hmmsearch_dir=hmmsearch_txt,
+            trna_dir=trna_gff,
+            meta_dir=meta,
+            gff_dir=proteins_gff,
+            input_fasta=fna,
+        )
+
+        assert (out_dir / "annotations.gff").is_file()
+        assert (out_dir / "annotations.gbk").is_file()
+        assert (out_dir / "plots" / "contig1.pdf").is_file()
+
+        gbk_records = list(SeqIO.parse(out_dir / "annotations.gbk", "genbank"))
+        assert len(gbk_records) == 1
+        assert gbk_records[0].id == "contig1"
+        assert len(gbk_records[0].seq) == 903
+
+    def test_generate_plots_and_annotations_html_output(self, tmp_path: Path) -> None:
+        from pca.annotations import generate_plots_and_annotations
+
+        fna = tmp_path / "input.fna"
+        fna.write_text(">contig1\n" + "ATG" * 300 + "TAA\n")
+
+        proteins_gff = tmp_path / "proteins.gff"
+        proteins_gff.write_text(
+            "##gff-version 3\n"
+            "##sequence-region contig1 1 903\n"
+            "contig1\tpyrodigal\tCDS\t1\t903\t100.0\t+\t0\tID=contig1_1\n"
+        )
+
+        hmmsearch_txt = tmp_path / "hmmsearch.txt"
+        hmmsearch_txt.write_text(
+            "contig1_1\t-\tphrog_1\t-\t1e-10\t100.0\t0.0\t1e-5\t50.0\t0.0\n"
+        )
+
+        meta = tmp_path / "meta.tsv"
+        meta.write_text("phrog\tcategory\tcolor\tannot\n1\tunknown\t#c9c9c9\ttest\n")
+
+        trna_gff = tmp_path / "trna.gff"
+        trna_gff.write_text("##gff-version 3\n")
+
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+
+        generate_plots_and_annotations(
+            tmp_dir=out_dir,
+            hmmsearch_dir=hmmsearch_txt,
+            trna_dir=trna_gff,
+            meta_dir=meta,
+            gff_dir=proteins_gff,
+            input_fasta=fna,
+            plot_formats=["html"],
+        )
+
+        assert (out_dir / "plots" / "contig1.html").is_file()
+

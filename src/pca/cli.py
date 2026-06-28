@@ -162,6 +162,15 @@ def main(ctx: click.Context, quiet: bool) -> None:
     help="Number of CPUs to use.",
 )
 @click.option(
+    "--plot-format",
+    "plot_formats",
+    multiple=True,
+    default=("pdf",),
+    show_default=True,
+    type=click.Choice(["pdf", "png", "html"], case_sensitive=False),
+    help="Plot output format. Specify multiple times for multiple formats.",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Show Snakemake execution plan without running.",
@@ -175,6 +184,7 @@ def runall(
     skip_trna: bool,
     db_dir: Path | None,
     cpus: int,
+    plot_formats: tuple[str, ...],
     dry_run: bool,
 ) -> None:
     """Run the full annotation pipeline."""
@@ -203,6 +213,7 @@ def runall(
         "db_dir": str(Path(next(iter(hmmerdb.values()))).resolve()),
         "meta_path": str(Path(meta_path).resolve()),
         "run_trna": not skip_trna,
+        "plot_formats": list(plot_formats),
     }
 
     config_path = output_dir / "config.yaml"

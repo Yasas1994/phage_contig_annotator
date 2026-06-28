@@ -22,6 +22,7 @@ dependencies = [
     "click>=8.0",
     "pyrodigal-gv>=0.3",
     "pyhmmer>=0.12",
+    "plotly>=6.0",
 ]
 
 [project.scripts]

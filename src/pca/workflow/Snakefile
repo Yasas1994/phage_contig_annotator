@@ -8,6 +8,7 @@ The workflow expects ``config.yaml`` in the working directory with at least:
 - ``db_dir``: directory containing HMM database splits
 - ``meta_path``: path to PHROG metadata TSV
 - ``run_trna``: whether to run tRNAscan-SE (default: true)
+- ``plot_formats``: list of plot formats, e.g. ``["pdf"]`` or ``["pdf", "html"]``
 """
 
 from pathlib import Path
@@ -18,6 +19,7 @@ input_type = config.get("input_type", "contigs")
 run_trna = config.get("run_trna", True)
 db_dir = Path(config["db_dir"])
 meta_path = Path(config["meta_path"])
+plot_formats = config.get("plot_formats", ["pdf"])
 
 proteins_faa = output_dir / "proteins.faa"
 proteins_gff = output_dir / "proteins.gff"
@@ -26,14 +28,16 @@ trna_gff = output_dir / "trna.gff"
 hmmsearch_txt = output_dir / "hmmsearch.txt"
 hmmsearch_csv = output_dir / "hmmsearch.csv"
 annotations_gff = output_dir / "annotations.gff"
+annotations_gbk = output_dir / "annotations.gbk"
 plots_dir = output_dir / "plots"
 
 
 rule all:
-    """Final outputs: annotated GFF and per-contig plots."""
+    """Final outputs: annotated GFF/GenBank and per-contig plots."""
     input:
         gff=annotations_gff,
-        plots=plots_dir,
+        gbk=annotations_gbk,
+        plots=directory(plots_dir),
 
 
 if input_type == "contigs":
@@ -97,8 +101,6 @@ else:
             tsv=trna_tsv,
             gff=trna_gff,
         run:
-            from pca.io import get_compressed_file_handle
-
             with open(output.tsv, "w") as fh:
                 fh.write("")
             with open(output.gff, "w") as fh:
@@ -128,7 +130,7 @@ rule hmmsearch:
 
 
 rule annotate:
-    """Generate annotated GFF and per-contig PNG maps."""
+    """Generate annotated GFF/GenBank and per-contig plots."""
     input:
         hmmsearch=hmmsearch_txt,
         trna_gff=trna_gff,
@@ -136,16 +138,19 @@ rule annotate:
         meta=meta_path,
     output:
         gff=annotations_gff,
+        gbk=annotations_gbk,
         plots=directory(plots_dir),
     run:
-        from pca.annotations import generate_plots_and_gff
+        from pca.annotations import generate_plots_and_annotations
 
         gff_input = input.proteins_gff if input_type == "contigs" else str(proteins_gff)
 
-        generate_plots_and_gff(
+        generate_plots_and_annotations(
             tmp_dir=output_dir,
             hmmsearch_dir=input.hmmsearch,
             trna_dir=input.trna_gff,
             meta_dir=input.meta,
             gff_dir=gff_input,
+            input_fasta=input_path,
+            plot_formats=plot_formats,
         )

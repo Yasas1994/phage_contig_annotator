@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from pca.annotations import (
     create_feature,
+    generate_plots_and_annotations,
     generate_plots_and_gff,
     get_coordinates,
     get_cordinates,
@@ -62,6 +63,7 @@ __all__ = [
     "parse_trna_gff",
     # annotations
     "create_feature",
+    "generate_plots_and_annotations",
     "generate_plots_and_gff",
     "get_coordinates",
     "get_cordinates",
