@@ -282,10 +282,11 @@ def main(ctx: click.Context, quiet: bool) -> None:
 )
 @click.option(
     "--translation-table",
-    default=11,
-    show_default=True,
+    "-t",
+    default=None,
     type=int,
-    help="NCBI translation table for gene calling. Overrides pyrodigal-gv metagenomic mode.",
+    help="NCBI translation table to force for gene calling (e.g. 11 or 4). "
+         "By default pyrodigal-gv selects the table automatically in metagenomic mode.",
 )
 @click.option(
     "--dry-run",
@@ -302,7 +303,7 @@ def run(
     db_dir: Path | None,
     cpus: int,
     plot_formats: tuple[str, ...],
-    translation_table: int,
+    translation_table: int | None,
     dry_run: bool,
 ) -> None:
     """Run the full annotation pipeline."""
