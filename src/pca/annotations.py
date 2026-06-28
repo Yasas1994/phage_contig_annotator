@@ -60,6 +60,8 @@ def create_feature(x: pd.Series) -> SeqFeature:
         "score": x["score"],
         "trna_type": x["trna_type"],
         "label": f"{x['trna_type']}_tRNA",
+        "category": "tRNA",
+        "color": "#e377c2",
         "ID": f"trna_{x['trna_no']}",
     }
     return SeqFeature(
@@ -1293,6 +1295,8 @@ def generate_plots_and_annotations(
     )
     phrogs_anno = phrogs_anno.fillna("unknown function")
     category_colors = dict(zip(phrogs_anno["category"], phrogs_anno["color"]))
+    if trna is not None:
+        category_colors["tRNA"] = "#e377c2"
 
     results_with_annotate = search_results.merge(
         phrogs_anno, how="inner", left_on="tname", right_on="phrog"
