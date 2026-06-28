@@ -31,6 +31,7 @@ hmmsearch_csv = output_dir / "hmm" / "hmmsearch.csv"
 annotations_gff = output_dir / "annotations" / "annotations.gff"
 annotations_gbk = output_dir / "annotations" / "annotations.gbk"
 plots_dir = output_dir / "plots"
+plot_done_files = [plots_dir / f".{fmt}_done" for fmt in plot_formats]
 
 
 rule all:
@@ -38,7 +39,7 @@ rule all:
     input:
         gff=annotations_gff,
         gbk=annotations_gbk,
-        plots=directory(plots_dir),
+        plots=plot_done_files,
 
 
 if input_type == "contigs":
@@ -141,7 +142,7 @@ rule annotate:
     output:
         gff=annotations_gff,
         gbk=annotations_gbk,
-        plots=directory(plots_dir),
+        done=plot_done_files,
     run:
         from pca.annotations import generate_plots_and_annotations
 

@@ -428,6 +428,11 @@ def generate_plots_and_annotations(
             for fmt in static_formats:
                 _write_static_plot(record, plots_dir, fmt)
 
+    # Write per-format sentinel files so workflow engines can depend on
+    # specific formats rather than the whole plots directory.
+    for fmt in requested_formats:
+        (plots_dir / f".{fmt}_done").touch()
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", BiopythonWarning)
         SeqIO.write(annotated_records, gbk_out_path, "genbank")
