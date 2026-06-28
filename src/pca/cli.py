@@ -23,6 +23,9 @@ def _package_dir() -> Path:
     return Path(__file__).parent.resolve()
 
 
+_DEFAULT_DB_DIR: Path = _package_dir().parent / "databases"
+
+
 def _load_config() -> configparser.ConfigParser:
     """Load the bundled ``config.ini``."""
     config_path = _package_dir() / "data" / "config.ini"
@@ -306,7 +309,7 @@ def run(
     logger = get_logger(quiet=ctx.obj["quiet"])
 
     config = _load_config()
-    db_dir = db_dir or Path(config["databases"]["dbroot"])
+    db_dir = db_dir or Path(config["databases"]["dbroot"] or _DEFAULT_DB_DIR)
     if not db_dir.is_dir():
         raise click.UsageError(f"Database directory does not exist: {db_dir}")
 
@@ -369,15 +372,17 @@ def run(
 @click.option(
     "-p",
     "--path",
+    "-db",
+    "--db",
     "path",
     default=None,
     type=click.Path(file_okay=False, writable=True, path_type=Path),
-    help="Path to store the database.",
+    help="Path to the database directory (alias: --db).",
 )
 @click.pass_context
 def download_db(ctx: click.Context, path: Path | None) -> None:
     """Download the annotation database and update local config."""
-    path = path or _package_dir() / "databases"
+    path = path or _DEFAULT_DB_DIR
     path.mkdir(parents=True, exist_ok=True)
 
     if not download_dbs(path=str(path)):
