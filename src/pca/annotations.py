@@ -448,31 +448,39 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     margin-left: 2px;
   }
   #gc-plots {
-    margin: 6px 0;
+    margin: 8px 0;
   }
   .gc-chart {
     width: 100%;
     height: 55px;
-    margin-bottom: 4px;
-    border: 0.5px solid #d3d1c7;
-    border-radius: 6px;
-    background: #fff;
+    margin-bottom: 3px;
+    border: 0.5px solid #e3e1db;
+    border-radius: 4px;
+    background: #fafaf9;
     position: relative;
     overflow: hidden;
   }
+  .gc-chart:last-child { margin-bottom: 0; }
   .gc-chart svg { display: block; }
   .gc-chart path.line {
     fill: none;
-    stroke-width: 1.5px;
+    stroke-width: 1.25px;
     stroke-linejoin: round;
     stroke-linecap: round;
   }
-  .gc-chart .axis text { font-size: 9px; fill: #666; }
-  .gc-chart .axis path, .gc-chart .axis line { stroke: #ccc; }
-  .gc-chart .zero-line { stroke: #999; stroke-dasharray: 2,2; pointer-events: none; }
+  .gc-chart .axis text { font-size: 9px; fill: #8c8a82; }
+  .gc-chart .axis path, .gc-chart .axis line { stroke: #e0ded8; }
+  .gc-chart .zero-line { stroke: #c9c7c1; stroke-dasharray: 2,2; pointer-events: none; }
   .gc-chart .crosshair {
-    stroke: #555;
-    stroke-dasharray: 3,3;
+    stroke: #8c8a82;
+    stroke-dasharray: 2,2;
+    stroke-width: 1px;
+    pointer-events: none;
+  }
+  .gc-chart .gc-title {
+    font-size: 9px;
+    font-weight: 500;
+    fill: #6b6961;
     pointer-events: none;
   }
 </style>
@@ -742,25 +750,29 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   });
 
   // --- GC metrics line charts ---
-  function drawGcLineChart(containerId, values, color, title, yFormat) {
+  function drawGcLineChart(containerId, values, color, title, yFormat, showXAxis) {
     if (!values || values.length === 0) return;
-    const container = d3.select("#" + containerId);
-    const cw = container.node().clientWidth;
-    const chartMargin = {top: 14, right: 10, bottom: 16, left: 40};
-    const w = Math.max(0, cw - chartMargin.left - chartMargin.right);
+    const w = overviewWidth;
+    const chartMargin = {top: 12, right: 0, bottom: showXAxis ? 14 : 2, left: 0};
     const h = Math.max(0, overviewHeight - chartMargin.top - chartMargin.bottom);
-    const svg = container.append("svg")
-      .attr("width", cw)
+    const svg = d3.select("#" + containerId).append("svg")
+      .attr("width", w)
       .attr("height", overviewHeight);
     const g = svg.append("g")
-      .attr("transform", "translate(" + chartMargin.left + "," + chartMargin.top + ")");
+      .attr("transform", "translate(0," + chartMargin.top + ")");
 
     const xScale = d3.scaleLinear().domain([0, contigLength]).range([0, w]);
     const yMin = d3.min(values);
     const yMax = d3.max(values);
-    const yPad = (yMax - yMin) * 0.05 || Math.abs(yMax) * 0.05 || 1;
+    let yDomain;
+    if (title === "GC content") {
+      yDomain = [0, 100];
+    } else {
+      const yPad = (yMax - yMin) * 0.05 || Math.abs(yMax) * 0.05 || 1;
+      yDomain = [yMin - yPad, yMax + yPad];
+    }
     const yScale = d3.scaleLinear()
-      .domain([yMin - yPad, yMax + yPad])
+      .domain(yDomain)
       .range([h, 0])
       .nice();
 
@@ -768,21 +780,27 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
       return {pos: gcPositions[i], value: v};
     });
 
-    g.append("g")
-      .attr("class", "axis")
-      .attr("transform", "translate(0," + h + ")")
-      .call(d3.axisBottom(xScale).ticks(Math.max(2, Math.floor(w / 80))).tickSize(3));
-    g.append("g")
-      .attr("class", "axis")
-      .call(d3.axisLeft(yScale).ticks(3).tickSize(3).tickFormat(yFormat || d3.format("~g")));
+    if (showXAxis) {
+      g.append("g")
+        .attr("class", "axis")
+        .attr("transform", "translate(0," + h + ")")
+        .call(d3.axisBottom(xScale)
+          .ticks(Math.max(2, Math.floor(w / 80)))
+          .tickSize(3)
+          .tickFormat(d3.format("~s")));
+    } else {
+      g.append("line")
+        .attr("x1", 0).attr("x2", w)
+        .attr("y1", h).attr("y2", h)
+        .attr("stroke", "#e0ded8")
+        .attr("stroke-width", 0.5);
+    }
 
-    if (yMin <= 0 && yMax >= 0) {
+    if (title !== "GC content" && yMin <= 0 && yMax >= 0) {
       g.append("line")
         .attr("class", "zero-line")
-        .attr("x1", 0)
-        .attr("x2", w)
-        .attr("y1", yScale(0))
-        .attr("y2", yScale(0));
+        .attr("x1", 0).attr("x2", w)
+        .attr("y1", yScale(0)).attr("y2", yScale(0));
     }
 
     const line = d3.line()
@@ -796,23 +814,19 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
       .attr("stroke", color);
 
     svg.append("text")
-      .attr("x", 6)
-      .attr("y", 11)
-      .style("font-size", "10px")
-      .style("font-weight", "600")
-      .style("fill", "#555")
+      .attr("class", "gc-title")
+      .attr("x", 5)
+      .attr("y", 10)
       .text(title);
 
     const crosshair = g.append("line")
       .attr("class", "crosshair")
-      .attr("y1", 0)
-      .attr("y2", h)
+      .attr("y1", 0).attr("y2", h)
       .style("opacity", 0);
 
     const bisect = d3.bisector(function(d) { return d.pos; }).left;
     const overlay = g.append("rect")
-      .attr("width", w)
-      .attr("height", h)
+      .attr("width", w).attr("height", h)
       .style("fill", "none")
       .style("pointer-events", "all");
 
@@ -826,7 +840,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
       if (!d) return;
       crosshair.attr("x1", xScale(d.pos)).attr("x2", xScale(d.pos)).style("opacity", 1);
       tooltip.transition().duration(50).style("opacity", 0.95);
-      tooltip.html("<b>" + title + "</b><br>position: " + d3.format(",")(Math.round(d.pos)) + " bp<br>value: " + d3.format(".3g")(d.value))
+      tooltip.html("<b>" + title + "</b><br>position: " + d3.format(",")(Math.round(d.pos)) + " bp<br>value: " + (yFormat || d3.format(".3g"))(d.value))
         .style("left", (event.pageX + 10) + "px")
         .style("top", (event.pageY - 28) + "px");
     }).on("mouseout", function() {
@@ -836,9 +850,9 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   }
 
   if (gcPositions.length > 0) {
-    drawGcLineChart("gc-content-chart", gcContent, "#185fa5", "GC content", d3.format(".1f"));
-    drawGcLineChart("gc-skew-chart", gcSkew, "#d95f02", "GC skew", d3.format(".1f"));
-    drawGcLineChart("gc-cumskew-chart", gcCumSkew, "#1a9f78", "Cum. GC skew", d3.format(".1f"));
+    drawGcLineChart("gc-content-chart", gcContent, "#5b9bd5", "GC content", d3.format(".1f"), false);
+    drawGcLineChart("gc-skew-chart", gcSkew, "#e29642", "GC skew", d3.format(".1f"), false);
+    drawGcLineChart("gc-cumskew-chart", gcCumSkew, "#6cbf6b", "Cum. GC skew", d3.format(".1f"), true);
   }
 
   function genePath(d) {
