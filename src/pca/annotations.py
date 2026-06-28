@@ -118,8 +118,54 @@ def _feature_to_dict(feature: Any) -> dict[str, Any]:
         "phrog": _qualifier_to_str(feature.qualifiers.get("phrog")),
         "score": _qualifier_to_str(feature.qualifiers.get("score")),
         "eval": _qualifier_to_str(feature.qualifiers.get("eval")),
+        "hostDomain": _qualifier_to_str(feature.qualifiers.get("hostDomain")),
+        "Avg_#AA": _qualifier_to_str(feature.qualifiers.get("Avg_#AA")),
+        "#ColMSA": _qualifier_to_str(feature.qualifiers.get("#ColMSA")),
+        "#prot": _qualifier_to_str(feature.qualifiers.get("#prot")),
+        "RefSeq": _qualifier_to_str(feature.qualifiers.get("RefSeq")),
+        "Pfam_hit": _qualifier_to_str(feature.qualifiers.get("Pfam_hit")),
+        "GO_hit": _qualifier_to_str(feature.qualifiers.get("GO_hit")),
+        "KO_hit": _qualifier_to_str(feature.qualifiers.get("KO_hit")),
         "trna_type": _qualifier_to_str(feature.qualifiers.get("trna_type")),
     }
+
+
+_TABLE_COLUMNS: list[tuple[str, str]] = [
+    ("phrog", "PHROG"),
+    ("label", "Label"),
+    ("category", "Category"),
+    ("hostDomain", "hostDomain"),
+    ("Avg_#AA", "Avg #AA"),
+    ("#ColMSA", "#ColMSA"),
+    ("#prot", "# Prot"),
+    ("RefSeq", "RefSeq"),
+    ("Pfam_hit", "Pfam hit"),
+    ("GO_hit", "GO hit"),
+    ("KO_hit", "KO hit"),
+    ("start", "Start"),
+    ("end", "End"),
+    ("strand", "Strand"),
+    ("score", "Score"),
+    ("eval", "E-value"),
+]
+
+# Map CSV column names (after rename) to Biopython SeqFeature qualifier keys.
+_METADATA_QUALIFIER_MAP: dict[str, str] = {
+    "annot": "label",
+    "category": "category",
+    "color": "color",
+    "phrog": "phrog",
+    "score": "score",
+    "eval": "eval",
+    "hostDomain": "hostDomain",
+    "Avg_#AA": "Avg_#AA",
+    "#ColMSA": "#ColMSA",
+    "#prot": "#prot",
+    "RefSeq": "RefSeq",
+    "Pfam_hit": "Pfam_hit",
+    "GO_hit": "GO_hit",
+    "KO_hit": "KO_hit",
+}
 
 
 _D3_HTML_TEMPLATE = """<!DOCTYPE html>
@@ -130,14 +176,18 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
   body { font-family: Arial, Helvetica, sans-serif; margin: 20px; background: #fff; }
-  #chart { width: 100%; overflow-x: auto; }
+  #controls { margin-bottom: 10px; }
+  #controls button, #controls label { margin-right: 10px; padding: 4px 8px; }
+  #chart { width: 100%; overflow-x: auto; border: 1px solid #eee; }
   .axis path, .axis line { fill: none; stroke: #333; shape-rendering: crispEdges; }
   .axis text { font-size: 12px; }
   .track-label { font-size: 12px; font-weight: bold; fill: #333; }
   .center-line { stroke: #999; stroke-width: 1; }
   .gene { stroke: #333; stroke-width: 1px; cursor: pointer; }
   .gene:hover { stroke: #000; stroke-width: 2px; }
+  .gene.selected { stroke: #000; stroke-width: 3px; }
   .label { font-size: 11px; fill: #000; pointer-events: none; }
+  .label.hidden { display: none; }
   .tooltip {
     position: absolute;
     text-align: left;
@@ -153,71 +203,81 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   .legend-box { stroke: #333; stroke-width: 1px; }
   .legend-title { font-weight: bold; font-size: 13px; }
   .legend-label { font-size: 12px; line-height: 1.2; word-wrap: break-word; color: #000; }
-  #annotation-table { margin-top: 30px; max-width: 1200px; overflow-x: auto; }
+  #annotation-table { margin-top: 30px; max-width: 100%; overflow-x: auto; }
   #annotation-table h4 { margin-bottom: 10px; }
   #annotation-table table { border-collapse: collapse; width: 100%; font-size: 12px; }
-  #annotation-table th, #annotation-table td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+  #annotation-table th, #annotation-table td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; white-space: nowrap; }
   #annotation-table th { background: #f5f5f5; font-weight: bold; }
-  #annotation-table tr:nth-child(even) { background: #fafafa; }
-  #annotation-table tr:hover { background: #eef; cursor: pointer; }
-  #annotation-table tr.annotation-row-highlight { background: #ffeb3b; }
-  .gene.selected { stroke: #000; stroke-width: 3px; }
+  #annotation-table tr { background-color: var(--row-bg, #fff); }
+  #annotation-table tr:nth-child(even) { background-color: var(--row-bg, #fafafa); }
+  #annotation-table tr:hover { background-color: #eef; }
+  #annotation-table tr.annotation-row-highlight { background-color: #ffeb3b !important; }
+  .pagination { margin-top: 10px; }
+  .pagination button { margin: 0 5px; padding: 4px 8px; }
+  .pagination .page-info { margin: 0 10px; }
 </style>
 </head>
 <body>
 <h3 style="text-align:center;">__TITLE__</h3>
+<div id="controls">
+  <button id="zoom-in">Zoom in</button>
+  <button id="zoom-out">Zoom out</button>
+  <button id="zoom-reset">Reset</button>
+  <label><input type="checkbox" id="show-labels" checked> Show labels</label>
+  <label><input type="checkbox" id="show-no-phrog"> Show genes without PHROGs</label>
+</div>
 <div id="chart"></div>
 <div id="annotation-table"></div>
 <script>
 (function() {
   const data = __FEATURES_JSON__;
   const categoryColors = __COLORS_JSON__;
+  const tableColumns = __COLUMNS_JSON__;
   const contigLength = __CONTIG_LENGTH__;
 
-  const margin = {top: 60, right: 200, bottom: 70, left: 80};
-  const plotWidth = Math.max(900, Math.min(1800, contigLength / 35));
-  const width = plotWidth - margin.left - margin.right;
+  data.forEach(function(d, i) { d._idx = i; });
+
+  const margin = {top: 60, right: 220, bottom: 70, left: 80};
+  const basePlotWidth = Math.max(900, Math.min(1800, contigLength / 35));
   const trackHeight = 55;
   const trackGap = 35;
   const forwardY = trackHeight / 2;
   const reverseY = trackHeight * 1.5 + trackGap;
   const trackHeightTotal = reverseY + trackHeight / 2 + 20;
-
-  // Legend is placed to the right; ensure the SVG is tall enough.
   const legendRowHeight = 44;
   const legendHeight = legendRowHeight * Object.keys(categoryColors).length + 30;
-  const height = Math.max(trackHeightTotal, legendHeight);
+  const baseHeight = Math.max(trackHeightTotal, legendHeight);
+
+  let zoomLevel = 1;
+  const minZoom = 0.5;
+  const maxZoom = 10;
+  const zoomStep = 1.2;
+  let showLabels = true;
+  let showNoPhrog = false;
+
+  const x = d3.scaleLinear().domain([0, contigLength]);
 
   const svg = d3.select("#chart")
     .append("svg")
-    .attr("width", width + margin.left + margin.right)
-    .attr("height", height + margin.top + margin.bottom)
-    .append("g")
-    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+    .attr("height", baseHeight + margin.top + margin.bottom);
 
-  const x = d3.scaleLinear()
-    .domain([0, contigLength])
-    .range([0, width]);
+  const defs = svg.append("defs");
+  const clipRect = defs.append("clipPath")
+      .attr("id", "plot-clip")
+    .append("rect")
+      .attr("height", baseHeight);
 
-  // Axis
-  svg.append("g")
-    .attr("class", "axis")
-    .attr("transform", "translate(0," + (height + 15) + ")")
-    .call(d3.axisBottom(x).ticks(10).tickFormat(function(d) {
-      if (d >= 1000000) return (d / 1000000).toFixed(1) + "M";
-      if (d >= 1000) return (d / 1000).toFixed(d % 1000 === 0 ? 0 : 1) + "k";
-      return d;
-    }));
+  const g = svg.append("g")
+      .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-  svg.append("text")
-    .attr("x", width / 2)
-    .attr("y", height + 50)
-    .style("text-anchor", "middle")
-    .style("font-size", "14px")
-    .text("Position (bp)");
+  const staticGroup = g.append("g").attr("class", "static-group");
+  const plotArea = g.append("g").attr("class", "plot-area").attr("clip-path", "url(#plot-clip)");
+  const geneGroup = plotArea.append("g").attr("class", "gene-group");
+  const labelGroup = plotArea.append("g").attr("class", "label-group");
+  const axisGroup = g.append("g").attr("class", "axis");
+  const legendGroup = g.append("g").attr("class", "legend-group");
 
-  // Track labels
-  svg.append("text")
+  staticGroup.append("text")
     .attr("class", "track-label")
     .attr("x", -10)
     .attr("y", forwardY)
@@ -225,7 +285,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     .attr("dominant-baseline", "middle")
     .text("Forward (+)");
 
-  svg.append("text")
+  staticGroup.append("text")
     .attr("class", "track-label")
     .attr("x", -10)
     .attr("y", reverseY)
@@ -233,15 +293,18 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     .attr("dominant-baseline", "middle")
     .text("Reverse (-)");
 
-  // Center lines
-  svg.append("line")
+  staticGroup.append("line")
     .attr("class", "center-line")
-    .attr("x1", 0).attr("x2", width)
     .attr("y1", forwardY).attr("y2", forwardY);
-  svg.append("line")
+  staticGroup.append("line")
     .attr("class", "center-line")
-    .attr("x1", 0).attr("x2", width)
     .attr("y1", reverseY).attr("y2", reverseY);
+
+  const axisLabel = g.append("text")
+    .attr("y", baseHeight + 50)
+    .style("text-anchor", "middle")
+    .style("font-size", "14px")
+    .text("Position (bp)");
 
   const tooltip = d3.select("body").append("div")
     .attr("class", "tooltip")
@@ -253,8 +316,8 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   function genePath(d) {
     const start = x(d.start);
     const end = x(d.end);
-    const width = Math.max(0, end - start);
-    const headPixels = Math.min(x(arrowHeadBp) - x(0), width / 2);
+    const w = Math.max(0, end - start);
+    const headPixels = Math.min(x(arrowHeadBp) - x(0), w / 2);
     const cy = d.strand === 1 ? forwardY : reverseY;
     const y0 = cy - featureHeight / 2;
     const y1 = cy + featureHeight / 2;
@@ -279,72 +342,95 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     return categoryColors[d.category] || d.color || "#c9c9c9";
   }
 
-  // Draw genes
-  svg.selectAll(".gene")
-    .data(data)
-    .enter()
-    .append("path")
-    .attr("class", "gene")
-    .attr("d", genePath)
-    .attr("fill", fillColor)
-    .attr("data-index", function(d, i) { return i; })
-    .on("click", function(event, d) {
-      const i = d3.select(this).attr("data-index");
-      d3.selectAll(".gene").classed("selected", false);
-      d3.select(this).classed("selected", true);
-      d3.selectAll("#annotation-table tr").classed("annotation-row-highlight", false);
-      const row = d3.select("#annotation-row-" + i);
-      row.classed("annotation-row-highlight", true);
-      const rowNode = row.node();
-      if (rowNode) rowNode.scrollIntoView({behavior: "smooth", block: "center"});
-    })
-    .on("mouseover", function(event, d) {
-      tooltip.transition().duration(150).style("opacity", 0.95);
-      tooltip.html("<b>" + (d.label || "feature") + "</b>" +
-        "<br>category: " + (d.category || "n/a") +
-        "<br>phrog: " + (d.phrog || "n/a") +
-        "<br>score: " + (d.score || "n/a") +
-        "<br>e-value: " + (d.eval || "n/a"))
-        .style("left", (event.pageX + 10) + "px")
-        .style("top", (event.pageY - 28) + "px");
-    })
-    .on("mousemove", function(event) {
-      tooltip.style("left", (event.pageX + 10) + "px")
-             .style("top", (event.pageY - 28) + "px");
-    })
-    .on("mouseout", function() {
-      tooltip.transition().duration(300).style("opacity", 0);
+  function drawGenes() {
+    const genes = geneGroup.selectAll(".gene").data(data);
+    const genesEnter = genes.enter().append("path").attr("class", "gene");
+    genesEnter.merge(genes)
+      .attr("d", genePath)
+      .attr("fill", fillColor)
+      .attr("data-index", function(d) { return d._idx; })
+      .on("click", function(event, d) {
+        d3.selectAll(".gene").classed("selected", false);
+        d3.select(this).classed("selected", true);
+        highlightTableRow(d._idx);
+      })
+      .on("mouseover", function(event, d) {
+        tooltip.transition().duration(150).style("opacity", 0.95);
+        tooltip.html("<b>" + (d.label || "feature") + "</b>" +
+          "<br>category: " + (d.category || "n/a") +
+          "<br>phrog: " + (d.phrog || "n/a") +
+          "<br>score: " + (d.score || "n/a") +
+          "<br>e-value: " + (d.eval || "n/a"))
+          .style("left", (event.pageX + 10) + "px")
+          .style("top", (event.pageY - 28) + "px");
+      })
+      .on("mousemove", function(event) {
+        tooltip.style("left", (event.pageX + 10) + "px")
+               .style("top", (event.pageY - 28) + "px");
+      })
+      .on("mouseout", function() {
+        tooltip.transition().duration(300).style("opacity", 0);
+      });
+    genes.exit().remove();
+  }
+
+  function hideOverlappingLabels() {
+    if (!showLabels) return;
+    const labels = labelGroup.selectAll(".label").nodes();
+    const padding = 4;
+    const items = labels.map(function(node) {
+      const bbox = node.getBBox();
+      return {node: node, left: bbox.x, right: bbox.x + bbox.width};
+    }).sort(function(a, b) { return a.left - b.left; });
+
+    let lastRight = -Infinity;
+    items.forEach(function(item) {
+      if (item.left < lastRight + padding) {
+        d3.select(item.node).classed("hidden", true);
+      } else {
+        d3.select(item.node).classed("hidden", false);
+        lastRight = item.right;
+      }
     });
+  }
 
-  // Labels
-  svg.selectAll(".label")
-    .data(data.filter(function(d) {
+  function drawLabels() {
+    if (!showLabels) {
+      labelGroup.selectAll(".label").remove();
+      return;
+    }
+    const labels = labelGroup.selectAll(".label").data(data.filter(function(d) {
       return d.label && d.label.toLowerCase() !== "unknown function";
-    }))
-    .enter()
-    .append("text")
-    .attr("class", "label")
-    .attr("x", function(d) { return (x(d.start) + x(d.end)) / 2; })
-    .attr("y", function(d) {
-      const cy = d.strand === 1 ? forwardY : reverseY;
-      return d.strand === 1 ? cy - featureHeight / 2 - 4 : cy + featureHeight / 2 + 12;
-    })
-    .attr("text-anchor", "middle")
-    .text(function(d) { return d.label; });
+    }));
+    const labelsEnter = labels.enter().append("text").attr("class", "label");
+    labelsEnter.merge(labels)
+      .attr("x", function(d) { return (x(d.start) + x(d.end)) / 2; })
+      .attr("y", function(d) {
+        const cy = d.strand === 1 ? forwardY : reverseY;
+        return d.strand === 1 ? cy - featureHeight / 2 - 4 : cy + featureHeight / 2 + 12;
+      })
+      .attr("text-anchor", "middle")
+      .classed("hidden", false)
+      .text(function(d) { return d.label; });
+    labels.exit().remove();
 
-  // Legend
-  const legendItems = Object.entries(categoryColors);
-  if (legendItems.length > 0) {
-    const legend = svg.append("g")
-      .attr("class", "legend")
-      .attr("transform", "translate(" + (width + 20) + ",20)");
+    if (labelsEnter.size() > 0 || labels.size() > 0) {
+      requestAnimationFrame(hideOverlappingLabels);
+    }
+  }
 
-    legend.append("text")
+  function drawLegend() {
+    const legendItems = Object.entries(categoryColors);
+    if (legendItems.length === 0) return;
+
+    legendGroup.selectAll("*").remove();
+    legendGroup.append("text")
       .attr("class", "legend-title")
       .attr("x", 0)
       .attr("y", 0)
       .text("Category");
-    const rows = legend.selectAll(".legend-item")
+
+    const rows = legendGroup.selectAll(".legend-item")
       .data(legendItems)
       .enter()
       .append("g")
@@ -360,58 +446,199 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     rows.append("foreignObject")
       .attr("x", 18)
       .attr("y", -2)
-      .attr("width", 170)
+      .attr("width", 190)
       .attr("height", legendRowHeight)
       .append("xhtml:div")
       .attr("class", "legend-label")
       .text(function(d) { return d[0]; });
   }
 
-  // Annotation table
+  function updateZoom() {
+    const plotWidth = basePlotWidth * zoomLevel;
+    const width = plotWidth - margin.left - margin.right;
+    svg.attr("width", width + margin.left + margin.right);
+    clipRect.attr("width", width);
+    x.range([0, width]);
+
+    staticGroup.selectAll(".center-line")
+      .attr("x1", 0).attr("x2", width);
+
+    axisGroup.attr("transform", "translate(0," + (baseHeight + 15) + ")")
+      .call(d3.axisBottom(x).ticks(10).tickFormat(function(d) {
+        if (d >= 1000000) return (d / 1000000).toFixed(1) + "M";
+        if (d >= 1000) return (d / 1000).toFixed(d % 1000 === 0 ? 0 : 1) + "k";
+        return d;
+      }));
+
+    axisLabel.attr("x", width / 2);
+    legendGroup.attr("transform", "translate(" + (width + 20) + ",20)");
+
+    geneGroup.selectAll(".gene").attr("d", genePath);
+    drawLabels();
+  }
+
+  d3.select("#zoom-in").on("click", function() {
+    zoomLevel = Math.min(maxZoom, zoomLevel * zoomStep);
+    updateZoom();
+  });
+  d3.select("#zoom-out").on("click", function() {
+    zoomLevel = Math.max(minZoom, zoomLevel / zoomStep);
+    updateZoom();
+  });
+  d3.select("#zoom-reset").on("click", function() {
+    zoomLevel = 1;
+    updateZoom();
+  });
+  d3.select("#show-labels").on("change", function() {
+    showLabels = this.checked;
+    drawLabels();
+  });
+  d3.select("#show-no-phrog").on("change", function() {
+    showNoPhrog = this.checked;
+    currentPage = 0;
+    renderTable();
+    renderPagination();
+  });
+
+  svg.on("wheel", function(event) {
+    event.preventDefault();
+    if (event.deltaY < 0) {
+      zoomLevel = Math.min(maxZoom, zoomLevel * zoomStep);
+    } else {
+      zoomLevel = Math.max(minZoom, zoomLevel / zoomStep);
+    }
+    updateZoom();
+  });
+
+  function pastelColor(hex) {
+    const rgb = d3.rgb(hex);
+    return d3.rgb(
+      Math.round(255 - (255 - rgb.r) * 0.25),
+      Math.round(255 - (255 - rgb.g) * 0.25),
+      Math.round(255 - (255 - rgb.b) * 0.25)
+    ).formatHex();
+  }
+
   const tableContainer = d3.select("#annotation-table");
   tableContainer.append("h4")
-    .text("Annotations (" + data.length + " features)");
+    .text("Annotations");
 
   const table = tableContainer.append("table");
   const thead = table.append("thead").append("tr");
   thead.selectAll("th")
-    .data(["PHROG", "Label", "Category", "Start", "End", "Strand", "Score", "E-value"])
+    .data(tableColumns)
     .enter()
     .append("th")
-    .text(function(d) { return d; });
+    .text(function(d) { return d.header; });
 
   const tbody = table.append("tbody");
-  const rows = tbody.selectAll("tr")
-    .data(data)
-    .enter()
-    .append("tr")
-    .attr("id", function(d, i) { return "annotation-row-" + i; })
-    .attr("data-index", function(d, i) { return i; });
 
-  rows.selectAll("td")
-    .data(function(d) {
-      return [
-        d.phrog || (d.trna_type ? "tRNA-" + d.trna_type : "-"),
-        d.label || "-",
-        d.category || "-",
-        d.start,
-        d.end,
-        d.strand === 1 ? "+" : "-",
-        d.score || "-",
-        d.eval || "-"
-      ];
-    })
-    .enter()
-    .append("td")
-    .text(function(d) { return d; });
+  const rowsPerPage = 10;
+  let currentPage = 0;
 
-  rows.on("click", function(event, d) {
-    const i = d3.select(this).attr("data-index");
-    d3.selectAll(".gene").classed("selected", false);
-    d3.select(".gene[data-index='" + i + "']").classed("selected", true);
+  function tableData() {
+    return showNoPhrog ? data : data.filter(function(d) { return d.phrog; });
+  }
+
+  function cellValue(d, col) {
+    if (col.key === "strand") return d.strand === 1 ? "+" : "-";
+    if (col.key === "phrog") return d.phrog || (d.trna_type ? "tRNA-" + d.trna_type : "-");
+    const v = d[col.key];
+    return (v === 0 || v) ? v : "-";
+  }
+
+  function renderTable() {
+    const tData = tableData();
+    const start = currentPage * rowsPerPage;
+    const pageData = tData.slice(start, start + rowsPerPage);
+
+    const rows = tbody.selectAll("tr").data(pageData, function(d) { return d._idx; });
+    rows.exit().remove();
+    const rowsEnter = rows.enter().append("tr")
+      .attr("class", "annotation-row");
+
+    rowsEnter.merge(rows)
+      .attr("id", function(d) { return "annotation-row-" + d._idx; })
+      .attr("data-index", function(d) { return d._idx; })
+      .style("--row-bg", function(d) {
+        const c = categoryColors[d.category] || d.color;
+        return c ? pastelColor(c) : null;
+      })
+      .on("click", function(event, d) {
+        d3.selectAll(".gene").classed("selected", false);
+        d3.select(".gene[data-index='" + d._idx + "']").classed("selected", true);
+        d3.selectAll("#annotation-table tr").classed("annotation-row-highlight", false);
+        d3.select(this).classed("annotation-row-highlight", true);
+      });
+
+    const cells = rowsEnter.merge(rows).selectAll("td").data(function(d) {
+      return tableColumns.map(function(col) { return cellValue(d, col); });
+    });
+    cells.enter().append("td").merge(cells).text(function(d) { return d; });
+    cells.exit().remove();
+  }
+
+  function highlightTableRow(index) {
+    const feature = data[index];
+    if (!feature.phrog && !showNoPhrog) {
+      showNoPhrog = true;
+      d3.select("#show-no-phrog").property("checked", true);
+      currentPage = 0;
+      renderTable();
+      renderPagination();
+    }
+    const tData = tableData();
+    const localIndex = tData.indexOf(feature);
+    const totalPages = Math.ceil(tData.length / rowsPerPage);
+    const page = Math.floor(localIndex / rowsPerPage);
+    if (page !== currentPage && page >= 0 && page < totalPages) {
+      currentPage = page;
+      renderTable();
+      renderPagination();
+    }
     d3.selectAll("#annotation-table tr").classed("annotation-row-highlight", false);
-    d3.select(this).classed("annotation-row-highlight", true);
+    const row = d3.select("#annotation-row-" + index);
+    row.classed("annotation-row-highlight", true);
+    const rowNode = row.node();
+    if (rowNode) rowNode.scrollIntoView({behavior: "smooth", block: "center"});
+  }
+
+  const pagination = tableContainer.append("div").attr("class", "pagination");
+  const prevButton = pagination.append("button").text("Previous");
+  const pageInfo = pagination.append("span").attr("class", "page-info");
+  const nextButton = pagination.append("button").text("Next");
+
+  function renderPagination() {
+    const tData = tableData();
+    const totalPages = Math.ceil(tData.length / rowsPerPage);
+    pageInfo.text("Page " + (currentPage + 1) + " of " + totalPages + " (" + tData.length + " features)");
+    prevButton.property("disabled", currentPage === 0);
+    nextButton.property("disabled", currentPage >= totalPages - 1);
+  }
+
+  prevButton.on("click", function() {
+    if (currentPage > 0) {
+      currentPage--;
+      renderTable();
+      renderPagination();
+    }
   });
+
+  nextButton.on("click", function() {
+    const totalPages = Math.ceil(tableData().length / rowsPerPage);
+    if (currentPage < totalPages - 1) {
+      currentPage++;
+      renderTable();
+      renderPagination();
+    }
+  });
+
+  renderTable();
+  renderPagination();
+
+  drawGenes();
+  drawLegend();
+  updateZoom();
 })();
 </script>
 </body>
@@ -441,12 +668,28 @@ def _write_interactive_plot(
     features_json = json.dumps(features)
     colors_json = json.dumps(ordered_colors)
 
+    # Only include optional metadata columns for which at least one feature has
+    # a non-empty value, keeping the predefined column order.
+    present_meta_cols = {
+        key
+        for key, _header in _TABLE_COLUMNS
+        if any(feature.get(key) for feature in features)
+    }
+    table_columns = [
+        {"key": key, "header": header}
+        for key, header in _TABLE_COLUMNS
+        if key in {"phrog", "label", "category", "start", "end", "strand", "score", "eval"}
+        or key in present_meta_cols
+    ]
+    columns_json = json.dumps(table_columns)
+
     safe_title = html.escape(record.id)
     html_content = (
         _D3_HTML_TEMPLATE
         .replace("__TITLE__", safe_title)
         .replace("__FEATURES_JSON__", features_json)
         .replace("__COLORS_JSON__", colors_json)
+        .replace("__COLUMNS_JSON__", columns_json)
         .replace("__CONTIG_LENGTH__", str(contig_length))
     )
 
@@ -608,16 +851,16 @@ def generate_plots_and_annotations(
             tmp = results_filtered[results_filtered["contig"] == record.id]
 
             for pos, feature in enumerate(record.features, start=1):
-                tmp_feature = tmp[tmp["position"] == pos][
-                    ["category", "color", "annot", "phrog", "score", "eval"]
+                available_meta_cols = [
+                    col for col in _METADATA_QUALIFIER_MAP if col in tmp.columns
                 ]
+                tmp_feature = tmp[tmp["position"] == pos][available_meta_cols]
                 if not tmp_feature.empty:
-                    feature.qualifiers.update({"label": tmp_feature["annot"].values[0]})
-                    feature.qualifiers.update({"category": tmp_feature["category"].values[0]})
-                    feature.qualifiers.update({"eval": tmp_feature["eval"].values[0]})
-                    feature.qualifiers.update({"score": tmp_feature["score"].values[0]})
-                    feature.qualifiers.update({"color": tmp_feature["color"].values[0]})
-                    feature.qualifiers.update({"phrog": tmp_feature["phrog"].values[0]})
+                    for col in available_meta_cols:
+                        qualifier_key = _METADATA_QUALIFIER_MAP[col]
+                        feature.qualifiers.update(
+                            {qualifier_key: tmp_feature[col].values[0]}
+                        )
                 else:
                     feature.qualifiers.update({"label": "unknown function"})
                     feature.qualifiers.update({"category": "unknown"})
