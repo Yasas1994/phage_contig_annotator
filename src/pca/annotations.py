@@ -36,6 +36,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_PLOT_FORMATS = ("pdf",)
 SUPPORTED_PLOT_FORMATS = {"pdf", "png", "html"}
 
+# Static plot layout tunables.
+_STATIC_FIGURE_WIDTH = 15  # inches
+_STATIC_MAX_BPS_PER_LINE = 50_000
+_STATIC_LABEL_ROTATION = 45
+_STATIC_PNG_DPI = 300
+
 
 def get_coordinates(x: pd.Series) -> pd.Series:
     """Normalize tRNA coordinates and strand."""
@@ -1542,7 +1548,11 @@ def _write_static_plot(
     format: str,
     category_colors: dict[str, str],
 ) -> None:
-    """Write a static matplotlib genome map for a contig with a category legend."""
+    """Write a static matplotlib genome map for a contig with a category legend.
+
+    Labels are rotated upward to reduce overlap, and long contigs are split
+    into multiple horizontal rows. PNG output is rendered at 300 DPI.
+    """
     import matplotlib
 
     matplotlib.use("Agg")
@@ -1554,15 +1564,39 @@ def _write_static_plot(
         if feat.label == "unknown function":
             feat.label = None
 
-    fig, ax1 = plt.subplots(1, 1, figsize=(15, 4))
-    fig.tight_layout(pad=2.5)
-    ax, _ = graphic_record.plot(
-        ax=ax1,
+    plot_kwargs = dict(
         strand_in_label_threshold=7,
         annotate_inline=False,
-        figure_height=3,
+        elevate_outline_annotations=True,
+        max_label_length=30,
+        max_line_length=25,
     )
-    ax.set_title(record.id)
+
+    seq_length = _contig_length(record)
+    axes: list[Any]
+    if seq_length > _STATIC_MAX_BPS_PER_LINE:
+        n_lines = (seq_length + _STATIC_MAX_BPS_PER_LINE - 1) // _STATIC_MAX_BPS_PER_LINE
+        fig, raw_axes = graphic_record.plot_on_multiple_lines(
+            n_lines=n_lines,
+            figure_width=_STATIC_FIGURE_WIDTH,
+            **plot_kwargs,
+        )
+        axes = list(raw_axes) if n_lines > 1 else [raw_axes]
+        fig.suptitle(record.id, fontsize=14)
+    else:
+        fig, ax1 = plt.subplots(1, 1, figsize=(_STATIC_FIGURE_WIDTH, 4))
+        ax, _ = graphic_record.plot(ax=ax1, **plot_kwargs)
+        ax.set_title(record.id)
+        axes = [ax]
+
+    for ax in axes:
+        for text in ax.texts:
+            text.set_rotation(_STATIC_LABEL_ROTATION)
+            text.set_horizontalalignment("left")
+            text.set_verticalalignment("bottom")
+            text.set_rotation_mode("anchor")
+            text.set_fontsize(9)
+            text.set_bbox(None)
 
     present_categories = {
         _qualifier_to_str(f.qualifiers.get("category"))
@@ -1576,7 +1610,7 @@ def _write_static_plot(
             if category in present_categories
         ]
         if legend_handles:
-            ax.legend(
+            axes[0].legend(
                 handles=legend_handles,
                 loc="upper left",
                 bbox_to_anchor=(1.01, 1.0),
@@ -1586,7 +1620,10 @@ def _write_static_plot(
             fig.subplots_adjust(right=0.82)
 
     out_path = plots_dir / f"{record.id}.{format}"
-    ax.figure.savefig(str(out_path), bbox_inches="tight", format=format)
+    savefig_kwargs = {"bbox_inches": "tight", "format": format, "pad_inches": 0.3}
+    if format == "png":
+        savefig_kwargs["dpi"] = _STATIC_PNG_DPI
+    fig.savefig(str(out_path), **savefig_kwargs)
     plt.clf()
     plt.close("all")
 

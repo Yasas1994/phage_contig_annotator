@@ -2,7 +2,11 @@
 
 from pathlib import Path
 
-from pca.annotations import _compute_gc_metrics, _parse_translation_tables
+from Bio.Seq import Seq
+from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqRecord import SeqRecord
+
+from pca.annotations import _compute_gc_metrics, _parse_translation_tables, _write_static_plot
 
 
 def test_compute_gc_metrics_for_simple_sequence() -> None:
@@ -33,3 +37,27 @@ def test_parse_translation_tables_returns_empty_for_missing_headers(tmp_path: Pa
     gff = tmp_path / "genes.gff"
     gff.write_text("NC_003438.1\tprodigal\tCDS\t1\t100\t.\t+\t0\tID=1_1\n")
     assert _parse_translation_tables(gff) == {}
+
+
+def test_write_static_plot_creates_pdf_and_png(tmp_path: Path) -> None:
+    plots_dir = tmp_path / "plots"
+    plots_dir.mkdir()
+    record = SeqRecord(Seq("A" * 5000), id="test_contig")
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(100, 900, strand=1),
+            type="CDS",
+            qualifiers={
+                "label": "test protein",
+                "category": "other",
+                "color": "#9467bd",
+            },
+        )
+    )
+    category_colors = {"other": "#9467bd", "unknown": "#c9c9c9"}
+    _write_static_plot(record, plots_dir, "pdf", category_colors)
+    _write_static_plot(record, plots_dir, "png", category_colors)
+    pdf_path = plots_dir / "test_contig.pdf"
+    png_path = plots_dir / "test_contig.png"
+    assert pdf_path.exists() and pdf_path.stat().st_size > 0
+    assert png_path.exists() and png_path.stat().st_size > 0
