@@ -772,9 +772,54 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const margin = {top: 55, right: 220, bottom: 55, left: 80};
   const trackHeight = 55;
   const trackGap = 35;
-  const forwardY = trackHeight / 2;
-  const reverseY = trackHeight * 1.5 + trackGap;
-  const trackHeightTotal = reverseY + trackHeight / 2 + 20;
+  const featureHeight = 22;
+  const laneStep = 16;
+
+  // Stack overlapping features on the same strand into separate lanes so that
+  // consecutive overlapping genes do not occlude each other.
+  function assignLanes(features) {
+    const byStrand = {1: [], "-1": []};
+    features.forEach(function(d) {
+      byStrand[d.strand === 1 ? 1 : -1].push(d);
+    });
+    [1, -1].forEach(function(strand) {
+      const feats = byStrand[strand].sort(function(a, b) {
+        return a.start - b.start || a.end - b.end;
+      });
+      const laneEnds = [];
+      feats.forEach(function(d) {
+        let lane = -1;
+        for (let i = 0; i < laneEnds.length; i++) {
+          if (d.start >= laneEnds[i]) {
+            lane = i;
+            break;
+          }
+        }
+        if (lane === -1) {
+          lane = laneEnds.length;
+          laneEnds.push(0);
+        }
+        d.lane = lane;
+        laneEnds[lane] = Math.max(laneEnds[lane] || 0, d.end);
+      });
+    });
+  }
+  assignLanes(data);
+
+  function featureCenterY(d) {
+    const base = d.strand === 1 ? forwardY : reverseY;
+    const offset = (d.lane || 0) * laneStep;
+    return d.strand === 1 ? base - offset : base + offset;
+  }
+
+  const maxForwardLane = d3.max(data.filter(function(d) { return d.strand === 1; }), function(d) { return d.lane || 0; }) || 0;
+  const maxReverseLane = d3.max(data.filter(function(d) { return d.strand === -1; }), function(d) { return d.lane || 0; }) || 0;
+  const maxLaneOffset = Math.max(maxForwardLane, maxReverseLane) * laneStep;
+  const lanePadding = maxLaneOffset + 10;
+
+  const forwardY = lanePadding + trackHeight / 2;
+  const reverseY = forwardY + trackHeight + trackGap;
+  const trackHeightTotal = reverseY + trackHeight / 2 + lanePadding;
   const legendRowHeight = 44;
   const legendHeight = legendRowHeight * Object.keys(categoryColors).length + 30;
   const plotHeight = Math.max(trackHeightTotal, legendHeight);
@@ -865,7 +910,6 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     .style("opacity", 0);
 
   const arrowHeadPx = 7;  // target arrow-head width in screen pixels
-  const featureHeight = 22;
 
   // Compute a per-feature maximum arrow-head size (in bp) so arrow heads do
   // not visually overlap other features.  The head is drawn inside the
@@ -1073,7 +1117,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     const w = Math.max(0, end - start);
     const maxHeadBp = (d.maxHeadBp !== undefined) ? d.maxHeadBp : x.invert(arrowHeadPx) - x.invert(0);
     const headPixels = Math.min(x(maxHeadBp), w / 2);
-    const cy = d.strand === 1 ? forwardY : reverseY;
+    const cy = featureCenterY(d);
     const y0 = cy - featureHeight / 2;
     const y1 = cy + featureHeight / 2;
     const mid = cy;
@@ -1161,7 +1205,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     labelsEnter.merge(labels)
       .attr("x", function(d) { return (currentXScale(d.start) + currentXScale(d.end)) / 2; })
       .attr("y", function(d) {
-        const cy = d.strand === 1 ? forwardY : reverseY;
+        const cy = featureCenterY(d);
         return d.strand === 1 ? cy - featureHeight / 2 - 4 : cy + featureHeight / 2 + 12;
       })
       .attr("text-anchor", "middle")
