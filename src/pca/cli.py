@@ -38,19 +38,40 @@ def _write_config(config: configparser.ConfigParser) -> None:
         config.write(configfile)
 
 
+def _tsv_to_phrog_csv(tsv_path: Path, csv_path: Path) -> None:
+    """Convert the legacy PHROG metadata TSV to the new CSV format.
+
+    The new CSV keeps the same four core columns but uses CSV quoting, which
+    is required for category names that contain commas (e.g. "DNA, RNA and
+    nucleotide metabolism").
+    """
+    import pandas as pd
+
+    df = pd.read_csv(tsv_path, sep="\t")
+    df = df.rename(
+        columns={"phrog": "#phrog", "annot": "Annotation", "category": "Category"}
+    )
+    # The legacy TSV stores a numeric phrog id; the CSV stores the prefixed
+    # identifier used by the search results.
+    df["#phrog"] = df["#phrog"].apply(lambda x: f"phrog_{x}")
+    df.to_csv(csv_path, index=False)
+
+
 def _discover_databases(db_dir: str) -> tuple[dict[str, str], str | None]:
     """Return discovered HMM databases and the PHROG metadata path.
 
     Supports both the expected packaged layout (``hmmerdb*`` directories and a
-    ``meta`` directory containing ``phrog_annot_v4.tsv``) and flat layouts
+    ``meta`` directory containing ``PHROG_annot_v4.csv``) and flat layouts
     produced by older extraction code.
     """
     db_path = Path(db_dir)
     hmmerdb: dict[str, str] = {}
     meta_path: str | None = None
 
-    # Locate metadata TSV anywhere under db_dir.
-    meta_candidates = list(db_path.rglob("phrog_annot_v4.tsv"))
+    # Prefer the extended PHROG metadata CSV; fall back to the legacy TSV.
+    meta_candidates = list(db_path.rglob("PHROG_annot_v4.csv"))
+    if not meta_candidates:
+        meta_candidates = list(db_path.rglob("phrog_annot_v4.tsv"))
     if meta_candidates:
         meta_path = str(meta_candidates[0])
 
@@ -141,7 +162,7 @@ def _normalize_database_dir(path: str) -> None:
     """Organize extracted database files into a predictable layout.
 
     Moves loose ``.hmm`` files into a ``hmmerdb/`` directory and the PHROG
-    metadata TSV into a ``meta/`` directory when they are not already there.
+    metadata CSV into a ``meta/`` directory when they are not already there.
     """
     db_path = Path(path)
     hmmerdb_dir = db_path / "hmmerdb"
@@ -159,14 +180,27 @@ def _normalize_database_dir(path: str) -> None:
             if dest != hmm_file:
                 hmm_file.rename(dest)
 
-    # Gather loose metadata TSVs.
-    meta_files = [p for p in db_path.rglob("phrog_annot_v4.tsv") if p.parent != meta_dir]
-    if meta_files:
+    # Gather loose metadata CSVs.
+    csv_files = [p for p in db_path.rglob("PHROG_annot_v4.csv") if p.parent != meta_dir]
+    if csv_files:
         meta_dir.mkdir(exist_ok=True)
-        for meta_file in meta_files:
+        for meta_file in csv_files:
             dest = meta_dir / meta_file.name
             if dest != meta_file:
                 meta_file.rename(dest)
+
+    # Convert any loose legacy TSVs to the new CSV format when no CSV is present.
+    tsv_files = [
+        p for p in db_path.rglob("phrog_annot_v4.tsv")
+        if p.parent != meta_dir and not (meta_dir / "PHROG_annot_v4.csv").exists()
+    ]
+    if tsv_files:
+        meta_dir.mkdir(exist_ok=True)
+        for tsv_file in tsv_files:
+            csv_dest = meta_dir / "PHROG_annot_v4.csv"
+            _tsv_to_phrog_csv(tsv_file, csv_dest)
+            if tsv_file.parent == db_path:
+                tsv_file.unlink()
 
     # Remove empty directories left behind after moving files.
     for subdir in sorted(db_path.iterdir(), reverse=True):

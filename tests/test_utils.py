@@ -303,8 +303,8 @@ class TestAnnotations:
             "contig1_1\t-\tphrog_1\t-\t1e-10\t100.0\t0.0\t1e-5\t50.0\t0.0\n"
         )
 
-        meta = tmp_path / "meta.tsv"
-        meta.write_text("phrog\tcategory\tcolor\tannot\n1\tunknown\t#c9c9c9\ttest\n")
+        meta = tmp_path / "meta.csv"
+        meta.write_text("#phrog,Annotation,Category,color\nphrog_1,test,unknown,#c9c9c9\n")
 
         trna_gff = tmp_path / "trna.gff"
         trna_gff.write_text("##gff-version 3\n")
@@ -348,8 +348,8 @@ class TestAnnotations:
             "contig1_1\t-\tphrog_1\t-\t1e-10\t100.0\t0.0\t1e-5\t50.0\t0.0\n"
         )
 
-        meta = tmp_path / "meta.tsv"
-        meta.write_text("phrog\tcategory\tcolor\tannot\n1\tunknown\t#c9c9c9\ttest\n")
+        meta = tmp_path / "meta.csv"
+        meta.write_text("#phrog,Annotation,Category,color\nphrog_1,test,unknown,#c9c9c9\n")
 
         trna_gff = tmp_path / "trna.gff"
         trna_gff.write_text("##gff-version 3\n")

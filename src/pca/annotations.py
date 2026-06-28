@@ -471,7 +471,7 @@ def generate_plots_and_annotations(
     trna_dir:
         Path to the tRNAscan-SE GFF file (may be empty).
     meta_dir:
-        Path to the PHROG metadata TSV file.
+        Path to the PHROG metadata CSV file.
     gff_dir:
         Path to the protein GFF file produced by gene calling.
     input_fasta:
@@ -510,9 +510,11 @@ def generate_plots_and_annotations(
     else:
         trna = None
 
-    phrogs_anno = pd.read_table(meta_dir)
+    phrogs_anno = pd.read_csv(meta_dir)
+    phrogs_anno = phrogs_anno.rename(
+        columns={"#phrog": "phrog", "Annotation": "annot", "Category": "category"}
+    )
     phrogs_anno = phrogs_anno.fillna("unknown function")
-    phrogs_anno["phrog"] = phrogs_anno["phrog"].apply(lambda x: f"phrog_{x}")
     category_colors = dict(zip(phrogs_anno["category"], phrogs_anno["color"]))
 
     results_with_annotate = search_results.merge(
