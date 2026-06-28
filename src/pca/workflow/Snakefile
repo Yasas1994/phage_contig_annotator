@@ -156,4 +156,5 @@ rule annotate:
             gff_dir=gff_input,
             input_fasta=input_path,
             plot_formats=plot_formats,
+            translation_table=translation_table,
         )

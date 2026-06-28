@@ -8,6 +8,7 @@ import logging
 import os
 import warnings
 from collections.abc import Iterator, Sequence
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ import pandas as pd
 from Bio import BiopythonWarning, SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import FeatureLocation, SeqFeature
+from Bio.SeqUtils import gc_fraction
 from BCBio import GFF
 from dna_features_viewer import BiopythonTranslator
 
@@ -267,10 +269,145 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     word-wrap: break-word;
     font-family: inherit;
   }
+  /* ── Report header ────────────────────────────────────────── */
+  .ph-header {
+    font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
+    border: 0.5px solid #c0bfb8;
+    border-radius: 12px;
+    overflow: hidden;
+    max-width: 860px;
+    margin: 0 auto 20px auto;
+  }
+  .ph-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 18px;
+    background: #ebebea;
+    border-bottom: 0.5px solid #d3d1c7;
+  }
+  .ph-tool-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: #888780;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .ph-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #185fa5;
+    flex-shrink: 0;
+  }
+  .ph-timestamp {
+    font-size: 11px;
+    color: #888780;
+    letter-spacing: 0.03em;
+  }
+  .ph-body {
+    padding: 16px 20px 18px;
+    background: #ffffff;
+  }
+  .ph-contig-id {
+    font-size: 17px;
+    font-weight: 500;
+    color: #1a1a18;
+    letter-spacing: -0.01em;
+    margin: 0 0 14px 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    word-break: break-all;
+  }
+  .ph-chip {
+    font-size: 10px;
+    font-weight: 500;
+    background: #e6f1fb;
+    color: #185fa5;
+    border: 0.5px solid #b5d4f4;
+    border-radius: 4px;
+    padding: 2px 7px;
+    white-space: nowrap;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .ph-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 10px;
+  }
+  .ph-metric {
+    background: #f5f5f3;
+    border: 0.5px solid #d3d1c7;
+    border-radius: 8px;
+    padding: 9px 12px;
+  }
+  .ph-metric-label {
+    font-size: 10px;
+    color: #888780;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 4px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .ph-metric-value {
+    font-size: 15px;
+    font-weight: 500;
+    color: #1a1a18;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+  .ph-metric-value .unit {
+    font-size: 11px;
+    color: #5f5e5a;
+    font-weight: 400;
+    margin-left: 2px;
+  }
 </style>
 </head>
 <body>
-<h3 style="text-align:center;">__TITLE__</h3>
+
+<div class="ph-header">
+  <div class="ph-topbar">
+    <div class="ph-tool-badge">
+      <div class="ph-dot"></div>
+      phage_contig_annotator · PHROG annotation pipeline
+    </div>
+    <div class="ph-timestamp">__HEADER_TIMESTAMP__</div>
+  </div>
+  <div class="ph-body">
+    <div class="ph-contig-id">
+      __CONTIG_ID__
+      <span class="ph-chip">phage contig</span>
+    </div>
+    <div class="ph-metrics">
+      <div class="ph-metric">
+        <div class="ph-metric-label">Contig length</div>
+        <div class="ph-metric-value">__CONTIG_LENGTH_FORMATTED__ <span class="unit">bp</span></div>
+      </div>
+      <div class="ph-metric">
+        <div class="ph-metric-label">GC content</div>
+        <div class="ph-metric-value">__GC_CONTENT__</div>
+      </div>
+      <div class="ph-metric">
+        <div class="ph-metric-label">Strand bias</div>
+        <div class="ph-metric-value">__STRAND_BIAS__</div>
+      </div>
+      <div class="ph-metric">
+        <div class="ph-metric-label">PHROG hits</div>
+        <div class="ph-metric-value">__PHROG_HITS__ <span class="unit">annotated</span></div>
+      </div>
+      <div class="ph-metric">
+        <div class="ph-metric-label">Translation table</div>
+        <div class="ph-metric-value">__TRANSLATION_TABLE__</div>
+      </div>
+    </div>
+  </div>
+</div>
 <div id="controls">
   <button id="pan-left">&larr; Pan</button>
   <button id="pan-right">Pan &rarr;</button>
@@ -911,11 +1048,13 @@ def _write_interactive_plot(
     plots_dir: Path,
     contig_length: int,
     category_colors: dict[str, str],
+    translation_table: int | None = None,
 ) -> None:
     """Write an interactive D3.js HTML genome map for a contig.
 
     Genes are drawn on two tracks: forward strand above and reverse strand
-    below. A category color legend and hover tooltips are included.
+    below. A category color legend and hover tooltips are included. A header
+    card with contig metrics is rendered above the map.
     """
     features = [_feature_to_dict(f) for f in record.features]
     features.sort(key=lambda f: (f["start"], f["end"]))
@@ -943,6 +1082,46 @@ def _write_interactive_plot(
     ]
     columns_json = json.dumps(table_columns)
 
+    # Header metrics
+    timestamp = datetime.now(timezone.utc).astimezone().strftime(
+        "%Y-%m-%d · %H:%M:%S UTC%z"
+    )
+
+    if record.seq:
+        gc_value = f"{gc_fraction(record.seq) * 100:.1f}<span class=\"unit\">%</span>"
+    else:
+        gc_value = "— <span class=\"unit\" style=\"font-size:10px\">awaited</span>"
+
+    forward = sum(1 for f in record.features if f.location.strand == 1)
+    reverse = sum(1 for f in record.features if f.location.strand == -1)
+    if forward > reverse:
+        strand_bias = 'Forward <span class="unit">dominant</span>'
+    elif reverse > forward:
+        strand_bias = 'Reverse <span class="unit">dominant</span>'
+    else:
+        strand_bias = "Balanced"
+
+    phrog_hits = sum(
+        1
+        for f in record.features
+        if f.qualifiers.get("category")
+        and f.qualifiers.get("category")[0] not in {"unknown function", "unknown"}
+    )
+
+    if translation_table is None:
+        translation_value = "Auto <span class=\"unit\">pyrodigal-gv</span>"
+    else:
+        table_labels = {
+            1: "standard",
+            4: "mycoplasma",
+            11: "bacterial",
+            15: "alternative yeasts",
+        }
+        label = table_labels.get(translation_table, "NCBI table")
+        translation_value = (
+            f"{translation_table} <span class=\"unit\">{label}</span>"
+        )
+
     safe_title = html.escape(record.id)
     html_content = (
         _D3_HTML_TEMPLATE
@@ -951,6 +1130,13 @@ def _write_interactive_plot(
         .replace("__COLORS_JSON__", colors_json)
         .replace("__COLUMNS_JSON__", columns_json)
         .replace("__CONTIG_LENGTH__", str(contig_length))
+        .replace("__HEADER_TIMESTAMP__", timestamp)
+        .replace("__CONTIG_ID__", safe_title)
+        .replace("__CONTIG_LENGTH_FORMATTED__", f"{contig_length:,}")
+        .replace("__GC_CONTENT__", gc_value)
+        .replace("__STRAND_BIAS__", strand_bias)
+        .replace("__PHROG_HITS__", str(phrog_hits))
+        .replace("__TRANSLATION_TABLE__", translation_value)
     )
 
     out_path = plots_dir / f"{record.id}.html"
@@ -1029,6 +1215,7 @@ def generate_plots_and_annotations(
     gff_dir: str | os.PathLike[str],
     input_fasta: str | os.PathLike[str],
     plot_formats: Sequence[str] = DEFAULT_PLOT_FORMATS,
+    translation_table: int | None = None,
 ) -> None:
     """Generate annotated GFF/GenBank and per-contig plots from HMM results.
 
@@ -1049,6 +1236,9 @@ def generate_plots_and_annotations(
     plot_formats:
         Iterable of plot formats to produce. Supported: ``pdf``, ``png``, ``html``.
         Default is ``("pdf",)``.
+    translation_table:
+        NCBI translation table used for gene calling. Displayed in the HTML
+        report header. ``None`` means pyrodigal-gv's metagenomic auto-selection.
     """
     tmp_dir = Path(tmp_dir)
     plots_dir = tmp_dir / "plots"
@@ -1139,7 +1329,9 @@ def generate_plots_and_annotations(
             contig_length = _contig_length(record)
 
             if "html" in requested_formats:
-                _write_interactive_plot(record, plots_dir, contig_length, category_colors)
+                _write_interactive_plot(
+                    record, plots_dir, contig_length, category_colors, translation_table
+                )
 
             static_formats = requested_formats & {"pdf", "png"}
             for fmt in static_formats:
