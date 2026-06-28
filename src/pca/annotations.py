@@ -6,6 +6,7 @@ import html
 import json
 import logging
 import os
+import re
 import warnings
 from collections.abc import Iterator, Sequence
 from datetime import datetime, timezone
@@ -70,6 +71,28 @@ def create_feature(x: pd.Series) -> SeqFeature:
         id=str(x["trna_no"]),
         qualifiers=qualifiers,
     )
+
+
+def _parse_translation_tables(gff_path: str | os.PathLike[str]) -> dict[str, int]:
+    """Extract per-contig translation tables from a prodigal-gv GFF header.
+
+    Prodigal-gv writes the selected ``transl_table`` in the ``# Model Data:``
+    line, even when running in automatic metagenomic mode. The preceding
+    ``# Sequence Data:`` line gives the contig header via ``seqhdr=...``.
+    """
+    tables: dict[str, int] = {}
+    current_header: str | None = None
+    with open(gff_path) as handle:
+        for line in handle:
+            line = line.strip()
+            if line.startswith("# Sequence Data:"):
+                match = re.search(r'seqhdr="([^"]+)"', line)
+                current_header = match.group(1) if match else None
+            elif line.startswith("# Model Data:"):
+                match = re.search(r'transl_table=(\d+)', line)
+                if match and current_header is not None:
+                    tables[current_header] = int(match.group(1))
+    return tables
 
 
 def _iter_gff_records(gff_path: str | os.PathLike[str]) -> Iterator[Any]:
@@ -1257,7 +1280,10 @@ def generate_plots_and_annotations(
         Default is ``("pdf",)``.
     translation_table:
         NCBI translation table used for gene calling. Displayed in the HTML
-        report header. ``None`` means pyrodigal-gv's metagenomic auto-selection.
+        report header. When the protein GFF contains prodigal-gv ``Model Data``
+        headers, the actual per-contig table is extracted and this value is
+        used only as a fallback. ``None`` means pyrodigal-gv's metagenomic
+        auto-selection.
     """
     tmp_dir = Path(tmp_dir)
     plots_dir = tmp_dir / "plots"
@@ -1271,6 +1297,9 @@ def generate_plots_and_annotations(
         raise ValueError(f"Unsupported plot formats: {unsupported}")
 
     sequences = _read_sequences(input_fasta)
+    translation_tables = _parse_translation_tables(gff_dir)
+    if translation_tables:
+        logger.info("parsed translation tables from GFF: %s", translation_tables)
 
     logger.info("processing hmm results")
     search_results = pd.DataFrame(parse_hmmsearch(hmmsearch_dir))
@@ -1350,8 +1379,11 @@ def generate_plots_and_annotations(
             contig_length = _contig_length(record)
 
             if "html" in requested_formats:
+                record_translation_table = translation_tables.get(
+                    record.id, translation_table
+                )
                 _write_interactive_plot(
-                    record, plots_dir, contig_length, category_colors, translation_table
+                    record, plots_dir, contig_length, category_colors, record_translation_table
                 )
 
             static_formats = requested_formats & {"pdf", "png"}
