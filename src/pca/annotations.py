@@ -304,13 +304,10 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
       updateView();
     });
 
-  // Invisible capture surface on top for pan/zoom and hover/click.
-  const overlay = plotWrapper.append("rect")
-    .attr("width", width)
-    .attr("height", plotHeight)
-    .style("fill", "none")
-    .style("pointer-events", "all")
-    .call(zoom);
+  // The root SVG captures pan/zoom events; genes and labels are drawn
+  // on top so their own click/hover handlers are reached first.
+  const overlay = svg;
+  svg.call(zoom);
 
   const geneGroup = plotArea.append("g").attr("class", "gene-group");
   const labelGroup = plotArea.append("g").attr("class", "label-group");
@@ -414,7 +411,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     const start = currentXScale(d.start);
     const end = currentXScale(d.end);
     const w = Math.max(0, end - start);
-    const headPixels = Math.min(currentXScale(arrowHeadBp) - currentXScale(0), w / 2);
+    const headPixels = Math.min(x(arrowHeadBp), w / 2);
     const cy = d.strand === 1 ? forwardY : reverseY;
     const y0 = cy - featureHeight / 2;
     const y1 = cy + featureHeight / 2;
