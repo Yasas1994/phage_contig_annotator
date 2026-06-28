@@ -163,3 +163,23 @@ It also shows GC content, GC skew, and cumulative GC skew tracks.
 An example report is included at [docs/examples/NODE_94_report.html](docs/examples/NODE_94_report.html).
 Open it locally after cloning, or enable GitHub Pages on the `docs/` folder to
 view it directly in a browser.
+
+### Convert existing annotations to HTML
+
+If you already have an annotated GenBank or GFF file, you can generate the
+same interactive HTML report without re-running the pipeline:
+
+```bash
+phage_contig_annotator utils -i genome.gbk -o genome.html
+```
+
+For GFF files that do not contain embedded sequences, provide the nucleotide
+FASTA file with `-f`:
+
+```bash
+phage_contig_annotator utils -i annotations.gff -f contigs.fna -o html_reports/
+```
+
+By default one HTML file is written per contig. When the input contains a
+single record, `-o` can be a single `.html` file; for multiple records, specify
+an output directory. Use `--theme dark` to generate the dark-themed version.

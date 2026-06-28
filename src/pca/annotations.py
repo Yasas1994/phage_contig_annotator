@@ -24,6 +24,7 @@ from dna_features_viewer import BiopythonTranslator
 from pca.parsers import parse_hmmsearch, parse_trna_gff
 
 __all__ = [
+    "convert_to_html",
     "create_feature",
     "get_coordinates",
     "get_cordinates",
@@ -35,6 +36,23 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PLOT_FORMATS = ("pdf",)
 SUPPORTED_PLOT_FORMATS = {"pdf", "png", "html"}
+
+# Fallback colors used for standalone HTML conversion when no PHROG metadata
+# CSV is supplied. The palette matches the default PHROG category colors.
+_DEFAULT_CATEGORY_COLORS: dict[str, str] = {
+    "head and packaging": "#1f77b4",
+    "tail": "#2ca02c",
+    "lysis": "#d62728",
+    "DNA, RNA and nucleotide metabolism": "#ff7f0e",
+    "integration and excision": "#9467bd",
+    "transcription regulation": "#8c564b",
+    "connector": "#e377c2",
+    "moron, auxiliary metabolic gene and host takeover": "#7f7f7f",
+    "other": "#bcbd22",
+    "unknown": "#c9c9c9",
+    "unknown function": "#c9c9c9",
+    "tRNA": "#e377c2",
+}
 
 # Static plot layout tunables.
 _STATIC_FIGURE_WIDTH = 24  # inches
@@ -1448,12 +1466,31 @@ def _write_interactive_plot(
     category_colors: dict[str, str],
     translation_table: int | None = None,
     theme: str = "light",
+    out_path: Path | None = None,
 ) -> None:
     """Write an interactive D3.js HTML genome map for a contig.
 
     Genes are drawn on two tracks: forward strand above and reverse strand
     below. A category color legend and hover tooltips are included. A header
     card with contig metrics is rendered above the map.
+
+    Parameters
+    ----------
+    record:
+        Biopython SeqRecord to plot.
+    plots_dir:
+        Directory used when ``out_path`` is not provided.
+    contig_length:
+        Length of the contig in base pairs.
+    category_colors:
+        Mapping of category names to hex colors.
+    translation_table:
+        NCBI translation table to display in the report header.
+    theme:
+        ``"light"`` or ``"dark"``.
+    out_path:
+        Optional explicit output path. When omitted, the file is written to
+        ``plots_dir / f"{record.id}.html"``.
     """
     features = [_feature_to_dict(f) for f in record.features]
     features.sort(key=lambda f: (f["start"], f["end"]))
@@ -1553,8 +1590,145 @@ def _write_interactive_plot(
         .replace("__THEME__", theme_value)
     )
 
-    out_path = plots_dir / f"{record.id}.html"
+    if out_path is None:
+        out_path = plots_dir / f"{record.id}.html"
     out_path.write_text(html_content, encoding="utf-8")
+
+
+def _load_category_colors(meta_path: str | os.PathLike[str] | None) -> dict[str, str]:
+    """Return a category-to-color map from a PHROG metadata CSV or defaults."""
+    if meta_path is None:
+        return _DEFAULT_CATEGORY_COLORS
+
+    df = pd.read_csv(meta_path, low_memory=False)
+    df = df.rename(
+        columns={"#phrog": "phrog", "Annotation": "annot", "Category": "category"}
+    )
+    if "category" not in df.columns or "color" not in df.columns:
+        return _DEFAULT_CATEGORY_COLORS
+    colors = dict(zip(df["category"].astype(str), df["color"].astype(str)))
+    return colors if colors else _DEFAULT_CATEGORY_COLORS
+
+
+_IGNORED_FEATURE_TYPES = frozenset(
+    {"source", "region", "assembly_gap", "gap", "sequence_feature"}
+)
+
+
+def _normalize_features(record: Any) -> None:
+    """Ensure SeqFeature qualifiers needed by the HTML report are present.
+
+    Features whose type is ``source``, ``region``, ``gap``, etc. are dropped.
+    For the remaining features a ``label``, ``category`` and ``color`` qualifier
+    is added when missing.
+    """
+    record.features = [
+        f for f in record.features if f.type not in _IGNORED_FEATURE_TYPES
+    ]
+
+    for feature in record.features:
+        quals = feature.qualifiers
+
+        label = _qualifier_to_str(quals.get("label"))
+        if not label:
+            for candidate in ("gene", "product", "Name", "locus_tag", "ID"):
+                label = _qualifier_to_str(quals.get(candidate))
+                if label:
+                    break
+            if not label:
+                label = feature.type or "feature"
+            quals["label"] = label
+
+        category = _qualifier_to_str(quals.get("category"))
+        if not category:
+            if feature.type == "tRNA":
+                category = "tRNA"
+            else:
+                category = "unknown"
+            quals["category"] = category
+
+        color = _qualifier_to_str(quals.get("color"))
+        if not color:
+            quals["color"] = _DEFAULT_CATEGORY_COLORS.get(category, "#c9c9c9")
+
+
+def convert_to_html(
+    input_path: str | os.PathLike[str],
+    output_path: str | os.PathLike[str],
+    *,
+    fasta_path: str | os.PathLike[str] | None = None,
+    meta_path: str | os.PathLike[str] | None = None,
+    theme: str = "light",
+) -> list[Path]:
+    """Convert a GenBank or GFF file into an interactive HTML genome report.
+
+    Parameters
+    ----------
+    input_path:
+        Path to a ``.gb``, ``.gbk``, ``.genbank``, ``.gff`` or ``.gff3`` file.
+    output_path:
+        Target ``.html`` file (for single-record inputs) or output directory
+        (for multi-record inputs).
+    fasta_path:
+        Optional nucleotide FASTA file used to attach sequences to GFF records.
+        Required for GFF inputs that do not contain an embedded ``##FASTA`` block.
+    meta_path:
+        Optional PHROG metadata CSV. When omitted, built-in category colors are
+        used.
+    theme:
+        ``"light"`` or ``"dark"``.
+
+    Returns
+    -------
+    List of generated HTML file paths.
+    """
+    input_path = Path(input_path)
+    output_path = Path(output_path)
+    suffix = input_path.suffix.lower()
+
+    if suffix in {".gb", ".gbk", ".genbank"}:
+        records = list(SeqIO.parse(input_path, "genbank"))
+    elif suffix in {".gff", ".gff3"}:
+        sequences = _read_sequences(fasta_path) if fasta_path else {}
+        records = list(_attach_sequences(_iter_gff_records(input_path), sequences))
+    else:
+        raise ValueError(
+            f"Unsupported input format '{suffix}'. "
+            "Expected .gb, .gbk, .genbank, .gff or .gff3."
+        )
+
+    if not records:
+        raise ValueError(f"No records found in {input_path}")
+
+    category_colors = _load_category_colors(meta_path)
+
+    if output_path.suffix == ".html":
+        if len(records) > 1:
+            raise ValueError(
+                f"Input contains {len(records)} records; "
+                "specify an output directory instead of a single .html file."
+            )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        out_paths = [output_path]
+    else:
+        output_path.mkdir(parents=True, exist_ok=True)
+        out_paths = [output_path / f"{record.id}.html" for record in records]
+
+    for record, out_path in zip(records, out_paths):
+        _normalize_features(record)
+        contig_length = _contig_length(record)
+        _write_interactive_plot(
+            record,
+            plots_dir=out_path.parent,
+            contig_length=contig_length,
+            category_colors=category_colors,
+            translation_table=None,
+            theme=theme,
+            out_path=out_path,
+        )
+        logger.info("wrote interactive HTML report to %s", out_path)
+
+    return out_paths
 
 
 def _write_static_plot(

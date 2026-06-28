@@ -8,6 +8,7 @@ New code should import from the focused submodules (``io``, ``validation``,
 from __future__ import annotations
 
 from pca.annotations import (
+    convert_to_html,
     create_feature,
     generate_plots_and_annotations,
     generate_plots_and_gff,
@@ -62,6 +63,7 @@ __all__ = [
     "parse_trna",
     "parse_trna_gff",
     # annotations
+    "convert_to_html",
     "create_feature",
     "generate_plots_and_annotations",
     "generate_plots_and_gff",

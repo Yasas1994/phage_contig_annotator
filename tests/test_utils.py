@@ -371,3 +371,55 @@ class TestAnnotations:
         assert (out_dir / "annotations" / "annotations.gbk").is_file()
         assert (out_dir / "plots" / "contig1.html").is_file()
 
+    def test_convert_to_html_from_genbank(self, tmp_path: Path) -> None:
+        from Bio import SeqIO
+        from Bio.Seq import Seq
+        from Bio.SeqFeature import SeqFeature, FeatureLocation
+        from Bio.SeqRecord import SeqRecord
+
+        gbk = tmp_path / "genome.gbk"
+        record = SeqRecord(
+            Seq("ATG" * 200 + "TAA"),
+            id="contig1",
+            annotations={"molecule_type": "DNA"},
+        )
+        record.features.append(
+            SeqFeature(
+                FeatureLocation(0, 300, strand=1),
+                type="CDS",
+                qualifiers={"locus_tag": ["gene_1"], "product": ["tail protein"]},
+            )
+        )
+        SeqIO.write(record, gbk, "genbank")
+
+        out_html = tmp_path / "report.html"
+        paths = annotations.convert_to_html(gbk, out_html)
+
+        assert len(paths) == 1
+        assert paths[0] == out_html
+        assert out_html.is_file()
+        content = out_html.read_text()
+        assert "contig1" in content
+        assert "tail protein" in content
+
+    def test_convert_to_html_from_gff_with_fasta(self, tmp_path: Path) -> None:
+        from pca.annotations import convert_to_html
+
+        fasta = tmp_path / "genome.fna"
+        fasta.write_text(">contig1\n" + "ATG" * 100 + "TAA\n")
+
+        gff = tmp_path / "genome.gff"
+        gff.write_text(
+            "##gff-version 3\n"
+            "##sequence-region contig1 1 303\n"
+            "contig1\tprodigal\tCDS\t1\t300\t.\t+\t0\tID=gene_1;Name=head protein\n"
+        )
+
+        out_dir = tmp_path / "html_out"
+        paths = convert_to_html(gff, out_dir, fasta_path=fasta)
+
+        assert len(paths) == 1
+        assert paths[0].name == "contig1.html"
+        assert paths[0].is_file()
+        assert "head protein" in paths[0].read_text()
+

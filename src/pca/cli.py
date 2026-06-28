@@ -14,7 +14,7 @@ import click
 import requests
 import tqdm
 
-from pca import validation
+from pca import annotations, validation
 from pca.logutils import get_logger
 
 
@@ -418,6 +418,72 @@ def download_db(ctx: click.Context, path: Path | None) -> None:
     config.set("databases", "meta", str(path / "meta"))
     _write_config(config)
     click.echo(f"Updated config.ini with database path: {path}")
+
+
+@main.command()
+@click.option(
+    "-i",
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
+    help="Path to a GenBank (.gb, .gbk) or GFF (.gff, .gff3) file.",
+)
+@click.option(
+    "-o",
+    "--output",
+    "output_path",
+    required=True,
+    type=click.Path(file_okay=True, dir_okay=True, writable=True, path_type=Path),
+    help="Output .html file (single contig) or output directory (multiple contigs).",
+)
+@click.option(
+    "-f",
+    "--fasta",
+    "fasta_path",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
+    help="Optional nucleotide FASTA file for GFF inputs without embedded sequences.",
+)
+@click.option(
+    "--meta",
+    "meta_path",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
+    help="Optional PHROG metadata CSV for category colors.",
+)
+@click.option(
+    "--theme",
+    default="light",
+    show_default=True,
+    type=click.Choice(["light", "dark"], case_sensitive=False),
+    help="Color theme for the HTML report.",
+)
+@click.pass_context
+def utils(
+    ctx: click.Context,
+    input_path: Path,
+    output_path: Path,
+    fasta_path: Path | None,
+    meta_path: Path | None,
+    theme: str,
+) -> None:
+    """Convert a GenBank or GFF file to an interactive HTML report."""
+    logger = get_logger(quiet=ctx.obj["quiet"])
+    try:
+        out_paths = annotations.convert_to_html(
+            input_path,
+            output_path,
+            fasta_path=fasta_path,
+            meta_path=meta_path,
+            theme=theme,
+        )
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    for out_path in out_paths:
+        click.echo(f"Wrote {out_path}")
+    logger.info("generated %d HTML report(s)", len(out_paths))
 
 
 def _write_yaml_config(path: Path, config: dict[str, object]) -> None:
