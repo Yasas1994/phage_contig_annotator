@@ -2,7 +2,28 @@
 
 from pathlib import Path
 
-from pca.annotations import _parse_translation_tables
+from pca.annotations import (
+    _compute_gc_metrics,
+    _parse_translation_tables,
+    _plot_gc_metrics_base64,
+)
+
+
+def test_compute_gc_metrics_for_simple_sequence() -> None:
+    seq = "GCGCGCATAT" * 10  # 50% GC, equal G and C -> skew 0
+    positions, gc_values, skew_values, cumulative = _compute_gc_metrics(seq, num_windows=10)
+    assert len(positions) == len(gc_values) == len(skew_values) == len(cumulative) == 10
+    assert all(59 < g < 61 for g in gc_values)
+    assert all(abs(s) < 1e-9 for s in skew_values)
+    assert all(abs(c) < 1e-9 for c in cumulative)
+
+
+def test_plot_gc_metrics_base64_returns_data_uri() -> None:
+    seq = "GCGCGCATAT" * 50
+    positions, gc_values, skew_values, cumulative = _compute_gc_metrics(seq, num_windows=10)
+    uri = _plot_gc_metrics_base64(positions, gc_values, skew_values, cumulative)
+    assert uri.startswith("data:image/png;base64,")
+    assert len(uri) > 100
 
 
 def test_parse_translation_tables_extracts_per_contig_tables(tmp_path: Path) -> None:

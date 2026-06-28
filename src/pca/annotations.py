@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import html
+import io
 import json
 import logging
 import os
@@ -447,6 +449,22 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     font-weight: 400;
     margin-left: 2px;
   }
+  #gc-plots { margin-top: 28px; }
+  #gc-plots h4 {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #444;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  #gc-plots img {
+    display: block;
+    width: 100%;
+    border: 0.5px solid #d3d1c7;
+    border-radius: 10px;
+    background: #fff;
+  }
 </style>
 </head>
 <body>
@@ -500,6 +518,10 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
 </div>
 <div id="overview"></div>
 <div id="chart"></div>
+<div id="gc-plots">
+  <h4>GC metrics</h4>
+  <img src="__GC_PLOTS_BASE64__" alt="GC content, GC skew and cumulative GC skew">
+</div>
 <div id="annotation-table"></div>
 
 <script>
@@ -1085,6 +1107,83 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+def _compute_gc_metrics(
+    seq: str | Seq, num_windows: int = 200
+) -> tuple[list[int], list[float], list[float], list[float]]:
+    """Return window centers and GC content, GC skew, cumulative GC skew.
+
+    Metrics are computed over contiguous, non-overlapping windows.  GC skew is
+    ``(G - C) / (G + C) * 100`` and cumulative GC skew is the running sum of
+    the per-window GC skew values.
+    """
+    seq_str = str(seq).upper()
+    length = len(seq_str)
+    if length == 0:
+        return [], [], [], []
+
+    window_size = max(1, length // num_windows)
+    positions: list[int] = []
+    gc_values: list[float] = []
+    skew_values: list[float] = []
+
+    for start in range(0, length, window_size):
+        end = min(start + window_size, length)
+        window = seq_str[start:end]
+        a = window.count("A")
+        t = window.count("T")
+        g = window.count("G")
+        c = window.count("C")
+        valid = a + t + g + c
+        positions.append((start + end) // 2)
+        gc_values.append((g + c) / valid * 100 if valid else 0.0)
+        denom = g + c
+        skew_values.append((g - c) / denom * 100 if denom else 0.0)
+
+    cumulative_skew = list(pd.Series(skew_values).cumsum())
+    return positions, gc_values, skew_values, cumulative_skew
+
+
+def _plot_gc_metrics_base64(
+    positions: list[int],
+    gc_values: list[float],
+    skew_values: list[float],
+    cumulative_skew: list[float],
+) -> str:
+    """Render GC metrics as three subplots and return a base64 PNG data URI."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(3, 1, sharex=True, figsize=(12, 7))
+
+    axes[0].plot(positions, gc_values, color="#185fa5", linewidth=1.2)
+    axes[0].set_ylabel("GC (%)")
+    axes[0].set_title("GC content")
+    axes[0].grid(axis="y", linestyle="--", alpha=0.4)
+
+    axes[1].plot(positions, skew_values, color="#d95f02", linewidth=1.2)
+    axes[1].axhline(0, color="#333", linestyle="-", linewidth=0.5)
+    axes[1].set_ylabel("GC skew (%)")
+    axes[1].set_title("GC skew")
+    axes[1].grid(axis="y", linestyle="--", alpha=0.4)
+
+    axes[2].plot(positions, cumulative_skew, color="#1a9f78", linewidth=1.2)
+    axes[2].axhline(0, color="#333", linestyle="-", linewidth=0.5)
+    axes[2].set_ylabel("Cum. GC skew (%)")
+    axes[2].set_title("Cumulative GC skew")
+    axes[2].set_xlabel("Position (bp)")
+    axes[2].grid(axis="y", linestyle="--", alpha=0.4)
+
+    fig.tight_layout()
+    buffer = io.BytesIO()
+    fig.savefig(buffer, format="png", bbox_inches="tight", dpi=120)
+    plt.close(fig)
+    buffer.seek(0)
+    encoded = base64.b64encode(buffer.read()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
 def _write_interactive_plot(
     record: Any,
     plots_dir: Path,
@@ -1164,6 +1263,16 @@ def _write_interactive_plot(
             f"{translation_table} <span class=\"unit\">{label}</span>"
         )
 
+    if record.seq:
+        positions, gc_values, skew_values, cumulative_skew = _compute_gc_metrics(
+            record.seq
+        )
+        gc_plots_src = _plot_gc_metrics_base64(
+            positions, gc_values, skew_values, cumulative_skew
+        )
+    else:
+        gc_plots_src = ""
+
     safe_title = html.escape(record.id)
     html_content = (
         _D3_HTML_TEMPLATE
@@ -1179,6 +1288,7 @@ def _write_interactive_plot(
         .replace("__STRAND_BIAS__", strand_bias)
         .replace("__PHROG_HITS__", str(phrog_hits))
         .replace("__TRANSLATION_TABLE__", translation_value)
+        .replace("__GC_PLOTS_BASE64__", gc_plots_src)
     )
 
     out_path = plots_dir / f"{record.id}.html"
