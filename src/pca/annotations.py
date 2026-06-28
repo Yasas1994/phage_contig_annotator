@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import base64
 import html
-import io
 import json
 import logging
 import os
@@ -449,21 +447,33 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     font-weight: 400;
     margin-left: 2px;
   }
-  #gc-plots { margin-top: 28px; }
-  #gc-plots h4 {
-    margin: 0 0 10px 0;
-    font-size: 13px;
-    font-weight: 600;
-    color: #444;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+  #gc-plots {
+    margin: 6px 0;
   }
-  #gc-plots img {
-    display: block;
+  .gc-chart {
     width: 100%;
+    height: 55px;
+    margin-bottom: 4px;
     border: 0.5px solid #d3d1c7;
-    border-radius: 10px;
+    border-radius: 6px;
     background: #fff;
+    position: relative;
+    overflow: hidden;
+  }
+  .gc-chart svg { display: block; }
+  .gc-chart path.line {
+    fill: none;
+    stroke-width: 1.5px;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  .gc-chart .axis text { font-size: 9px; fill: #666; }
+  .gc-chart .axis path, .gc-chart .axis line { stroke: #ccc; }
+  .gc-chart .zero-line { stroke: #999; stroke-dasharray: 2,2; pointer-events: none; }
+  .gc-chart .crosshair {
+    stroke: #555;
+    stroke-dasharray: 3,3;
+    pointer-events: none;
   }
 </style>
 </head>
@@ -517,11 +527,12 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   <span class="zoom-hint">Wheel = zoom &middot; Shift+wheel / horizontal swipe = pan</span>
 </div>
 <div id="overview"></div>
-<div id="chart"></div>
 <div id="gc-plots">
-  <h4>GC metrics</h4>
-  <img src="__GC_PLOTS_BASE64__" alt="GC content, GC skew and cumulative GC skew">
+  <div class="gc-chart" id="gc-content-chart"></div>
+  <div class="gc-chart" id="gc-skew-chart"></div>
+  <div class="gc-chart" id="gc-cumskew-chart"></div>
 </div>
+<div id="chart"></div>
 <div id="annotation-table"></div>
 
 <script>
@@ -530,6 +541,10 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const categoryColors = __COLORS_JSON__;
   const tableColumns = __COLUMNS_JSON__;
   const contigLength = __CONTIG_LENGTH__;
+  const gcPositions = __GC_POSITIONS_JSON__;
+  const gcContent = __GC_CONTENT_JSON__;
+  const gcSkew = __GC_SKEW_JSON__;
+  const gcCumSkew = __GC_CUM_SKEW_JSON__;
 
   data.forEach(function(d, i) { d._idx = i; });
 
@@ -725,6 +740,106 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     const newTransform = d3.zoomIdentity.translate(tx, 0).scale(targetK);
     overlay.call(zoom.transform, clampTransform(newTransform));
   });
+
+  // --- GC metrics line charts ---
+  function drawGcLineChart(containerId, values, color, title, yFormat) {
+    if (!values || values.length === 0) return;
+    const container = d3.select("#" + containerId);
+    const cw = container.node().clientWidth;
+    const chartMargin = {top: 14, right: 10, bottom: 16, left: 40};
+    const w = Math.max(0, cw - chartMargin.left - chartMargin.right);
+    const h = Math.max(0, overviewHeight - chartMargin.top - chartMargin.bottom);
+    const svg = container.append("svg")
+      .attr("width", cw)
+      .attr("height", overviewHeight);
+    const g = svg.append("g")
+      .attr("transform", "translate(" + chartMargin.left + "," + chartMargin.top + ")");
+
+    const xScale = d3.scaleLinear().domain([0, contigLength]).range([0, w]);
+    const yMin = d3.min(values);
+    const yMax = d3.max(values);
+    const yPad = (yMax - yMin) * 0.05 || Math.abs(yMax) * 0.05 || 1;
+    const yScale = d3.scaleLinear()
+      .domain([yMin - yPad, yMax + yPad])
+      .range([h, 0])
+      .nice();
+
+    const series = values.map(function(v, i) {
+      return {pos: gcPositions[i], value: v};
+    });
+
+    g.append("g")
+      .attr("class", "axis")
+      .attr("transform", "translate(0," + h + ")")
+      .call(d3.axisBottom(xScale).ticks(Math.max(2, Math.floor(w / 80))).tickSize(3));
+    g.append("g")
+      .attr("class", "axis")
+      .call(d3.axisLeft(yScale).ticks(3).tickSize(3).tickFormat(yFormat || d3.format("~g")));
+
+    if (yMin <= 0 && yMax >= 0) {
+      g.append("line")
+        .attr("class", "zero-line")
+        .attr("x1", 0)
+        .attr("x2", w)
+        .attr("y1", yScale(0))
+        .attr("y2", yScale(0));
+    }
+
+    const line = d3.line()
+      .x(function(d) { return xScale(d.pos); })
+      .y(function(d) { return yScale(d.value); });
+
+    g.append("path")
+      .datum(series)
+      .attr("class", "line")
+      .attr("d", line)
+      .attr("stroke", color);
+
+    svg.append("text")
+      .attr("x", 6)
+      .attr("y", 11)
+      .style("font-size", "10px")
+      .style("font-weight", "600")
+      .style("fill", "#555")
+      .text(title);
+
+    const crosshair = g.append("line")
+      .attr("class", "crosshair")
+      .attr("y1", 0)
+      .attr("y2", h)
+      .style("opacity", 0);
+
+    const bisect = d3.bisector(function(d) { return d.pos; }).left;
+    const overlay = g.append("rect")
+      .attr("width", w)
+      .attr("height", h)
+      .style("fill", "none")
+      .style("pointer-events", "all");
+
+    overlay.on("mousemove", function(event) {
+      const mx = d3.pointer(event, g.node())[0];
+      const bp = Math.max(0, Math.min(contigLength, xScale.invert(mx)));
+      const idx = bisect(series, bp, 1);
+      const d0 = series[idx - 1];
+      const d1 = series[idx];
+      const d = (d0 && d1) ? (bp - d0.pos < d1.pos - bp ? d0 : d1) : (d0 || d1);
+      if (!d) return;
+      crosshair.attr("x1", xScale(d.pos)).attr("x2", xScale(d.pos)).style("opacity", 1);
+      tooltip.transition().duration(50).style("opacity", 0.95);
+      tooltip.html("<b>" + title + "</b><br>position: " + d3.format(",")(Math.round(d.pos)) + " bp<br>value: " + d3.format(".3g")(d.value))
+        .style("left", (event.pageX + 10) + "px")
+        .style("top", (event.pageY - 28) + "px");
+    }).on("mouseout", function() {
+      crosshair.style("opacity", 0);
+      tooltip.transition().duration(300).style("opacity", 0);
+    });
+  }
+
+  if (gcPositions.length > 0) {
+    drawGcLineChart("gc-content-chart", gcContent, "#185fa5", "GC content", d3.format(".1f"));
+    drawGcLineChart("gc-skew-chart", gcSkew, "#d95f02", "GC skew", d3.format(".1f"));
+    drawGcLineChart("gc-cumskew-chart", gcCumSkew, "#1a9f78", "Cum. GC skew", d3.format(".1f"));
+  }
 
   function genePath(d) {
     const start = currentXScale(d.start);
@@ -1143,47 +1258,6 @@ def _compute_gc_metrics(
     return positions, gc_values, skew_values, cumulative_skew
 
 
-def _plot_gc_metrics_base64(
-    positions: list[int],
-    gc_values: list[float],
-    skew_values: list[float],
-    cumulative_skew: list[float],
-) -> str:
-    """Render GC metrics as three subplots and return a base64 PNG data URI."""
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    fig, axes = plt.subplots(3, 1, sharex=True, figsize=(12, 7))
-
-    axes[0].plot(positions, gc_values, color="#185fa5", linewidth=1.2)
-    axes[0].set_ylabel("GC (%)")
-    axes[0].set_title("GC content")
-    axes[0].grid(axis="y", linestyle="--", alpha=0.4)
-
-    axes[1].plot(positions, skew_values, color="#d95f02", linewidth=1.2)
-    axes[1].axhline(0, color="#333", linestyle="-", linewidth=0.5)
-    axes[1].set_ylabel("GC skew (%)")
-    axes[1].set_title("GC skew")
-    axes[1].grid(axis="y", linestyle="--", alpha=0.4)
-
-    axes[2].plot(positions, cumulative_skew, color="#1a9f78", linewidth=1.2)
-    axes[2].axhline(0, color="#333", linestyle="-", linewidth=0.5)
-    axes[2].set_ylabel("Cum. GC skew (%)")
-    axes[2].set_title("Cumulative GC skew")
-    axes[2].set_xlabel("Position (bp)")
-    axes[2].grid(axis="y", linestyle="--", alpha=0.4)
-
-    fig.tight_layout()
-    buffer = io.BytesIO()
-    fig.savefig(buffer, format="png", bbox_inches="tight", dpi=120)
-    plt.close(fig)
-    buffer.seek(0)
-    encoded = base64.b64encode(buffer.read()).decode("ascii")
-    return f"data:image/png;base64,{encoded}"
-
-
 def _write_interactive_plot(
     record: Any,
     plots_dir: Path,
@@ -1267,11 +1341,8 @@ def _write_interactive_plot(
         positions, gc_values, skew_values, cumulative_skew = _compute_gc_metrics(
             record.seq
         )
-        gc_plots_src = _plot_gc_metrics_base64(
-            positions, gc_values, skew_values, cumulative_skew
-        )
     else:
-        gc_plots_src = ""
+        positions, gc_values, skew_values, cumulative_skew = [], [], [], []
 
     safe_title = html.escape(record.id)
     html_content = (
@@ -1288,7 +1359,10 @@ def _write_interactive_plot(
         .replace("__STRAND_BIAS__", strand_bias)
         .replace("__PHROG_HITS__", str(phrog_hits))
         .replace("__TRANSLATION_TABLE__", translation_value)
-        .replace("__GC_PLOTS_BASE64__", gc_plots_src)
+        .replace("__GC_POSITIONS_JSON__", json.dumps(positions))
+        .replace("__GC_CONTENT_JSON__", json.dumps(gc_values))
+        .replace("__GC_SKEW_JSON__", json.dumps(skew_values))
+        .replace("__GC_CUM_SKEW_JSON__", json.dumps(cumulative_skew))
     )
 
     out_path = plots_dir / f"{record.id}.html"
