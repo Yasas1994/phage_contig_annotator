@@ -153,11 +153,21 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   .legend-box { stroke: #333; stroke-width: 1px; }
   .legend-title { font-weight: bold; font-size: 13px; }
   .legend-label { font-size: 12px; line-height: 1.2; word-wrap: break-word; color: #000; }
+  #annotation-table { margin-top: 30px; max-width: 1200px; overflow-x: auto; }
+  #annotation-table h4 { margin-bottom: 10px; }
+  #annotation-table table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  #annotation-table th, #annotation-table td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; }
+  #annotation-table th { background: #f5f5f5; font-weight: bold; }
+  #annotation-table tr:nth-child(even) { background: #fafafa; }
+  #annotation-table tr:hover { background: #eef; cursor: pointer; }
+  #annotation-table tr.annotation-row-highlight { background: #ffeb3b; }
+  .gene.selected { stroke: #000; stroke-width: 3px; }
 </style>
 </head>
 <body>
 <h3 style="text-align:center;">__TITLE__</h3>
 <div id="chart"></div>
+<div id="annotation-table"></div>
 <script>
 (function() {
   const data = __FEATURES_JSON__;
@@ -277,6 +287,17 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     .attr("class", "gene")
     .attr("d", genePath)
     .attr("fill", fillColor)
+    .attr("data-index", function(d, i) { return i; })
+    .on("click", function(event, d) {
+      const i = d3.select(this).attr("data-index");
+      d3.selectAll(".gene").classed("selected", false);
+      d3.select(this).classed("selected", true);
+      d3.selectAll("#annotation-table tr").classed("annotation-row-highlight", false);
+      const row = d3.select("#annotation-row-" + i);
+      row.classed("annotation-row-highlight", true);
+      const rowNode = row.node();
+      if (rowNode) rowNode.scrollIntoView({behavior: "smooth", block: "center"});
+    })
     .on("mouseover", function(event, d) {
       tooltip.transition().duration(150).style("opacity", 0.95);
       tooltip.html("<b>" + (d.label || "feature") + "</b>" +
@@ -345,6 +366,52 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
       .attr("class", "legend-label")
       .text(function(d) { return d[0]; });
   }
+
+  // Annotation table
+  const tableContainer = d3.select("#annotation-table");
+  tableContainer.append("h4")
+    .text("Annotations (" + data.length + " features)");
+
+  const table = tableContainer.append("table");
+  const thead = table.append("thead").append("tr");
+  thead.selectAll("th")
+    .data(["PHROG", "Label", "Category", "Start", "End", "Strand", "Score", "E-value"])
+    .enter()
+    .append("th")
+    .text(function(d) { return d; });
+
+  const tbody = table.append("tbody");
+  const rows = tbody.selectAll("tr")
+    .data(data)
+    .enter()
+    .append("tr")
+    .attr("id", function(d, i) { return "annotation-row-" + i; })
+    .attr("data-index", function(d, i) { return i; });
+
+  rows.selectAll("td")
+    .data(function(d) {
+      return [
+        d.phrog || (d.trna_type ? "tRNA-" + d.trna_type : "-"),
+        d.label || "-",
+        d.category || "-",
+        d.start,
+        d.end,
+        d.strand === 1 ? "+" : "-",
+        d.score || "-",
+        d.eval || "-"
+      ];
+    })
+    .enter()
+    .append("td")
+    .text(function(d) { return d; });
+
+  rows.on("click", function(event, d) {
+    const i = d3.select(this).attr("data-index");
+    d3.selectAll(".gene").classed("selected", false);
+    d3.select(".gene[data-index='" + i + "']").classed("selected", true);
+    d3.selectAll("#annotation-table tr").classed("annotation-row-highlight", false);
+    d3.select(this).classed("annotation-row-highlight", true);
+  });
 })();
 </script>
 </body>
