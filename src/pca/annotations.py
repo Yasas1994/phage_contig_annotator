@@ -130,177 +130,137 @@ def _hex_to_luminance(hex_color: str) -> float:
     return 0.2126 * r + 0.7152 * g + 0.0722 * b
 
 
-def _assign_feature_rows(features: Sequence[Any]) -> dict[int, int]:
-    """Assign each feature to a non-overlapping row within its strand.
-
-    Returns a mapping from feature index to row number (0-based).
-    """
-    rows: dict[int, int] = {}
-    # Each element tracks the end coordinate of the last feature in that row.
-    row_ends: list[int] = []
-
-    for idx, feature in enumerate(features):
-        start = int(feature.location.start)
-        end = int(feature.location.end)
-        assigned = False
-        for row_idx, last_end in enumerate(row_ends):
-            if start > last_end:
-                rows[idx] = row_idx
-                row_ends[row_idx] = end
-                assigned = True
-                break
-        if not assigned:
-            new_row = len(row_ends)
-            rows[idx] = new_row
-            row_ends.append(end)
-
-    return rows
-
-
 def _write_interactive_plot(
     record: Any,
     plots_dir: Path,
     contig_length: int,
 ) -> None:
-    """Write an interactive Plotly HTML genome map for a contig."""
-    forward = [f for f in record.features if f.location.strand == 1]
-    reverse = [f for f in record.features if f.location.strand == -1]
+    """Write an interactive Plotly HTML genome map for a contig.
 
-    forward_rows = _assign_feature_rows(forward)
-    reverse_rows = _assign_feature_rows(reverse)
+    Mimics the static PDF style: a single horizontal track of arrow-shaped
+    features with labels above them and a position axis below.
+    """
+    feature_height = 0.25
+    arrow_head_bp = max(150, int(contig_length * 0.006))
+    label_y = 0.42
+    min_label_width = int(contig_length * 0.012)
 
-    row_height = 0.35
-    feature_height = 0.28
-    gap = 0.04
+    shape_traces = []
+    label_traces = []
 
-    shape_traces: list[go.Scatter] = []
-    label_traces: list[go.Scatter] = []
+    # Simple greedy label collision avoidance: each placed label occupies a
+    # [start, end] x-interval; skip labels that would overlap a previous one.
+    placed_labels: list[tuple[int, int]] = []
 
-    def _draw_track(
-        features: Sequence[Any],
-        row_assignments: dict[int, int],
-        sign: int,
-    ) -> None:
-        for idx, feature in enumerate(features):
-            start = int(feature.location.start)
-            end = int(feature.location.end)
-            row = row_assignments[idx]
-            color = feature.qualifiers.get("color", "#c9c9c9")
-            if isinstance(color, list):
-                color = color[0]
+    def _draw_arrow(feature: Any) -> None:
+        start = int(feature.location.start)
+        end = int(feature.location.end)
+        strand = feature.location.strand or 1
+        width = end - start
+        color = feature.qualifiers.get("color", "#c9c9c9")
+        if isinstance(color, list):
+            color = color[0]
 
-            y0 = sign * (gap + row * row_height)
-            y1 = sign * (gap + row * row_height + feature_height)
-            y = [y0, y0, y1, y1, y0]
-            x = [start, end, end, start, start]
+        head = min(arrow_head_bp, width // 2)
+        y0, y1 = -feature_height / 2, feature_height / 2
+        mid = 0.0
 
-            hover_text = _plotly_hover_text(feature, record.id)
-            label = feature.qualifiers.get("label", "")
-            if isinstance(label, list):
-                label = label[0] if label else ""
-            label = str(label)
+        if strand == 1:
+            # Rectangle + right-pointing arrowhead.
+            x = [
+                start,
+                end - head,
+                end,
+                end - head,
+                start,
+                start,
+            ]
+            y = [y0, y0, mid, y1, y1, y0]
+        else:
+            # Left-pointing arrowhead + rectangle.
+            x = [
+                start + head,
+                end,
+                end,
+                start + head,
+                start,
+                start + head,
+            ]
+            y = [y0, y0, y1, y1, mid, y0]
 
-            shape_traces.append(
-                go.Scatter(
-                    x=x,
-                    y=y,
-                    fill="toself",
-                    fillcolor=color,
-                    line={"color": "#333333", "width": 1},
-                    mode="lines",
-                    text=hover_text,
-                    hoverinfo="text",
-                    showlegend=False,
-                )
+        hover_text = _plotly_hover_text(feature, record.id)
+
+        shape_traces.append(
+            go.Scatter(
+                x=x,
+                y=y,
+                fill="toself",
+                fillcolor=color,
+                line={"color": "#333333", "width": 1},
+                mode="lines",
+                text=hover_text,
+                hoverinfo="text",
+                showlegend=False,
             )
+        )
 
-            if label and label.lower() != "unknown function":
-                feature_width = end - start
-                label_inside = feature_width > contig_length * 0.04
-                label_above = feature_width > contig_length * 0.06
-                if label_inside:
-                    label_y = (y0 + y1) / 2
-                    label_color = "#000000" if _hex_to_luminance(color) > 0.5 else "#ffffff"
-                elif label_above:
-                    label_y = y1 + sign * 0.08
-                    label_color = "#333333"
-                else:
-                    # Too narrow for a readable label; rely on hover text.
-                    continue
-                label_x = (start + end) / 2
-                # Keep label text from running off the left/right edges.
-                edge_buffer = contig_length * 0.02
-                label_x = max(edge_buffer, min(contig_length - edge_buffer, label_x))
-                label_traces.append(
-                    go.Scatter(
-                        x=[label_x],
-                        y=[label_y],
-                        mode="text",
-                        text=[label],
-                        textposition="middle center",
-                        textfont={"size": 9, "color": label_color},
-                        hoverinfo="skip",
-                        showlegend=False,
-                    )
-                )
+        label = feature.qualifiers.get("label", "")
+        if isinstance(label, list):
+            label = label[0] if label else ""
+        label = str(label)
+        if not label or label.lower() == "unknown function":
+            return
+        if width < min_label_width:
+            return
 
-    _draw_track(forward, forward_rows, sign=1)
-    _draw_track(reverse, reverse_rows, sign=-1)
+        label_center = (start + end) // 2
+        label_start = start
+        label_end = end
+        for placed_start, placed_end in placed_labels:
+            if label_end > placed_start and label_start < placed_end:
+                return
+        placed_labels.append((label_start, label_end))
 
-    max_forward_rows = max(forward_rows.values(), default=0) + 1
-    max_reverse_rows = max(reverse_rows.values(), default=0) + 1
-    y_max = gap + max_forward_rows * row_height + feature_height + 0.7
-    y_min = -(gap + max_reverse_rows * row_height + feature_height + 0.7)
+        label_traces.append(
+            go.Scatter(
+                x=[label_center],
+                y=[label_y],
+                mode="text",
+                text=[label],
+                textposition="middle center",
+                textfont={"size": 10, "color": "#000000"},
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+
+    for feature in record.features:
+        _draw_arrow(feature)
 
     fig = go.Figure(data=shape_traces + label_traces)
-    fig.add_hline(y=0, line={"color": "#666666", "width": 1})
-
-    strand_annotations = [
-        {
-            "x": 0.005,
-            "xref": "paper",
-            "y": 0.98,
-            "yref": "paper",
-            "text": "Forward strand",
-            "showarrow": False,
-            "font": {"size": 11, "color": "#333333"},
-            "xanchor": "left",
-            "yanchor": "top",
-        },
-        {
-            "x": 0.005,
-            "xref": "paper",
-            "y": 0.02,
-            "yref": "paper",
-            "text": "Reverse strand",
-            "showarrow": False,
-            "font": {"size": 11, "color": "#333333"},
-            "xanchor": "left",
-            "yanchor": "bottom",
-        },
-    ]
 
     fig.update_layout(
         title={"text": record.id, "x": 0.5, "xanchor": "center"},
         xaxis_title="Position (bp)",
-        annotations=strand_annotations,
         xaxis={
-            "range": [0, contig_length],
+            "range": [-contig_length * 0.01, contig_length * 1.01],
             "zeroline": False,
             "showgrid": True,
             "gridcolor": "#eeeeee",
+            "side": "bottom",
         },
         yaxis={
-            "range": [y_min, y_max],
+            "range": [-0.55, 0.55],
             "zeroline": False,
             "showgrid": False,
             "showticklabels": False,
+            "fixedrange": True,
         },
         hovermode="closest",
         plot_bgcolor="white",
-        height=max(520, 320 + 50 * max(max_forward_rows, max_reverse_rows)),
-        width=max(950, min(1600, int(contig_length / 45))),
-        margin={"l": 60, "r": 40, "t": 100, "b": 60},
+        height=300,
+        width=max(1000, min(1800, int(contig_length / 35))),
+        margin={"l": 60, "r": 40, "t": 55, "b": 55},
         dragmode="pan",
     )
     fig.update_xaxes(rangeslider_visible=False)
