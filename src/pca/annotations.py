@@ -203,80 +203,207 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
 <title>__TITLE__</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
-  body { font-family: Arial, Helvetica, sans-serif; margin: 20px; background: #fff; }
+  :root {
+    --bg: #ffffff;
+    --text: #1a1a18;
+    --text-muted: #666;
+    --link: #185fa5;
+    --border: #d3d1c7;
+    --header-bg: #ebebea;
+    --header-text: #888780;
+    --body-bg: #ffffff;
+    --metric-bg: #f5f5f3;
+    --chip-bg: #e6f1fb;
+    --chip-text: #185fa5;
+    --chip-border: #b5d4f4;
+    --btn-bg: #fff;
+    --btn-text: #1a1a18;
+    --btn-border: #c0bfb8;
+    --btn-hover: #ebebea;
+    --overview-bg: #fafafa;
+    --overview-border: #ddd;
+    --chart-bg: #ffffff;
+    --chart-border: #eee;
+    --chart-axis: #333;
+    --chart-axis-text: #555;
+    --chart-text: #333;
+    --gene-stroke: #333;
+    --gene-stroke-strong: #000;
+    --center-line: #999;
+    --gc-chart-bg: #fafaf9;
+    --gc-chart-border: #e3e1db;
+    --gc-axis: #e0ded8;
+    --gc-axis-text: #8c8a82;
+    --gc-zero: #c9c7c1;
+    --gc-crosshair: #8c8a82;
+    --gc-title: #6b6961;
+    --tooltip-bg: rgba(255, 255, 255, 0.95);
+    --tooltip-border: #ccc;
+    --tooltip-text: #1a1a18;
+    --tooltip-shadow: rgba(0,0,0,0.2);
+    --table-bg: #fff;
+    --table-header-bg: #f0efea;
+    --table-header-text: #666;
+    --table-row-even: #fafaf9;
+    --table-row-hover: rgba(0,0,0,0.03);
+    --highlight-overlay: rgba(0,0,0,0.35);
+    --legend-box-stroke: #333;
+    --overview-viewport-fill: rgba(70,130,180,0.15);
+    --overview-viewport-stroke: #4682b4;
+  }
+  body.dark {
+    --bg: #1a1a1a;
+    --text: #e8e6e1;
+    --text-muted: #a09c90;
+    --link: #7ab8ff;
+    --border: #3f3e3a;
+    --header-bg: #2a2a28;
+    --header-text: #9c9a92;
+    --body-bg: #1e1e1e;
+    --metric-bg: #2a2a28;
+    --chip-bg: #1f3a55;
+    --chip-text: #7ab8ff;
+    --chip-border: #365c82;
+    --btn-bg: #2a2a28;
+    --btn-text: #e8e6e1;
+    --btn-border: #5f5e5a;
+    --btn-hover: #3f3e3a;
+    --overview-bg: #222220;
+    --overview-border: #3f3e3a;
+    --chart-bg: #1e1e1e;
+    --chart-border: #3f3e3a;
+    --chart-axis: #8c8a82;
+    --chart-axis-text: #a09c90;
+    --chart-text: #c9c7c1;
+    --gene-stroke: #8c8a82;
+    --gene-stroke-strong: #e8e6e1;
+    --center-line: #5f5e5a;
+    --gc-chart-bg: #222220;
+    --gc-chart-border: #3f3e3a;
+    --gc-axis: #3f3e3a;
+    --gc-axis-text: #9c9a92;
+    --gc-zero: #5f5e5a;
+    --gc-crosshair: #a09c90;
+    --gc-title: #9c9a92;
+    --tooltip-bg: rgba(40, 40, 40, 0.95);
+    --tooltip-border: #5f5e5a;
+    --tooltip-text: #e8e6e1;
+    --tooltip-shadow: rgba(0,0,0,0.5);
+    --table-bg: #222220;
+    --table-header-bg: #2e2e2c;
+    --table-header-text: #a09c90;
+    --table-row-even: #2a2a28;
+    --table-row-hover: rgba(255,255,255,0.05);
+    --highlight-overlay: rgba(255,255,255,0.2);
+    --legend-box-stroke: #8c8a82;
+    --overview-viewport-fill: rgba(100,160,220,0.25);
+    --overview-viewport-stroke: #6aa9e6;
+  }
+  body {
+    font-family: Arial, Helvetica, sans-serif;
+    margin: 20px;
+    background: var(--bg);
+    color: var(--text);
+    transition: background 0.2s, color 0.2s;
+  }
+  #theme-toggle {
+    background: transparent;
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--header-text);
+    line-height: 1;
+  }
+  #theme-toggle:hover { background: var(--btn-hover); }
   #controls { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  #controls button, #controls label { padding: 4px 8px; }
-  #overview { width: 100%; height: 55px; margin-bottom: 6px; border: 1px solid #ddd; background: #fafafa; }
-  .overview-axis text { font-size: 10px; fill: #555; }
-  #chart { width: 100%; overflow: hidden; border: 1px solid #eee; cursor: grab; touch-action: none; }
+  #controls button, #controls label {
+    padding: 4px 8px;
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    border: 0.5px solid var(--btn-border);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  #controls button { cursor: pointer; }
+  #controls button:hover { background: var(--btn-hover); }
+  #controls input[type="checkbox"] { accent-color: var(--link); }
+  #overview { width: 100%; height: 55px; margin-bottom: 6px; border: 1px solid var(--overview-border); background: var(--overview-bg); }
+  .overview-axis text { font-size: 10px; fill: var(--chart-axis-text); }
+  #chart { width: 100%; overflow: hidden; border: 1px solid var(--chart-border); background: var(--chart-bg); cursor: grab; touch-action: none; }
   #chart:active { cursor: grabbing; }
-  .axis path, .axis line { fill: none; stroke: #333; shape-rendering: crispEdges; }
-  .axis text { font-size: 12px; }
-  .track-label { font-size: 12px; font-weight: bold; fill: #333; }
-  .center-line { stroke: #999; stroke-width: 1; }
-  .gene { stroke: #333; stroke-width: 1px; cursor: pointer; }
-  .gene:hover { stroke: #000; stroke-width: 2px; }
-  .gene.selected { stroke: #000; stroke-width: 3px; }
-  .label { font-size: 11px; fill: #000; pointer-events: none; }
+  .axis path, .axis line { fill: none; stroke: var(--chart-axis); shape-rendering: crispEdges; }
+  .axis text { font-size: 12px; fill: var(--chart-axis-text); }
+  .axis-label { font-size: 14px; fill: var(--chart-axis-text); }
+  .track-label { font-size: 12px; font-weight: bold; fill: var(--chart-text); }
+  .center-line { stroke: var(--center-line); stroke-width: 1; }
+  .gene { stroke: var(--gene-stroke); stroke-width: 1px; cursor: pointer; }
+  .gene:hover { stroke: var(--gene-stroke-strong); stroke-width: 2px; }
+  .gene.selected { stroke: var(--gene-stroke-strong); stroke-width: 3px; }
+  .label { font-size: 11px; fill: var(--chart-text); pointer-events: none; }
   .label.hidden { display: none; }
   .tooltip {
     position: absolute;
     text-align: left;
     padding: 8px;
     font-size: 12px;
-    background: rgba(255, 255, 255, 0.95);
-    border: 1px solid #ccc;
+    background: var(--tooltip-bg);
+    border: 1px solid var(--tooltip-border);
     border-radius: 4px;
     pointer-events: none;
-    box-shadow: 2px 2px 6px rgba(0,0,0,0.2);
+    box-shadow: 2px 2px 6px var(--tooltip-shadow);
+    color: var(--tooltip-text);
   }
   .legend { font-size: 12px; }
-  .legend-box { stroke: #333; stroke-width: 1px; }
-  .legend-title { font-weight: bold; font-size: 13px; }
-  .legend-label { font-size: 12px; line-height: 1.2; word-wrap: break-word; color: #000; }
+  .legend-box { stroke: var(--legend-box-stroke); stroke-width: 1px; }
+  .legend-title { font-weight: bold; font-size: 13px; fill: var(--text); }
+  .legend-label { font-size: 12px; line-height: 1.2; word-wrap: break-word; color: var(--text); }
   #annotation-table { margin-top: 28px; }
   #annotation-table h4 {
     margin: 0 0 10px 0;
     font-size: 13px;
     font-weight: 600;
-    color: #444;
+    color: var(--text);
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
   .table-wrap {
-    border: 0.5px solid #d3d1c7;
+    border: 0.5px solid var(--border);
     border-radius: 10px;
     overflow-x: auto;
     overflow-y: hidden;
-    background: #fff;
+    background: var(--table-bg);
   }
   #annotation-table table {
     border-collapse: collapse;
     width: 100%;
     font-size: 12px;
+    background: transparent;
   }
   #annotation-table th {
-    background: #f0efea;
+    background: var(--table-header-bg);
     font-weight: 600;
     font-size: 11px;
-    color: #666;
+    color: var(--table-header-text);
     text-transform: uppercase;
     letter-spacing: 0.05em;
     padding: 8px 10px;
     text-align: left;
-    border-bottom: 0.5px solid #d3d1c7;
+    border-bottom: 0.5px solid var(--border);
     white-space: nowrap;
   }
   #annotation-table td {
     padding: 7px 10px;
     text-align: left;
-    border-bottom: 0.5px solid #ebebea;
+    border-bottom: 0.5px solid var(--border);
     max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     vertical-align: top;
     cursor: pointer;
+    color: var(--text);
   }
   #annotation-table td.expander-col {
     width: 80px;
@@ -289,14 +416,14 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   .row-expander {
     padding: 2px 6px;
     font-size: 11px;
-    border: 0.5px solid #c0bfb8;
+    border: 0.5px solid var(--btn-border);
     border-radius: 6px;
-    background: #fff;
+    background: var(--btn-bg);
     cursor: pointer;
-    color: #185fa5;
+    color: var(--link);
     white-space: nowrap;
   }
-  .row-expander:hover { background: #e6f1fb; }
+  .row-expander:hover { background: var(--btn-hover); }
   #annotation-table td[data-col="hostDomain"],
   #annotation-table td[data-col="RefSeq"],
   #annotation-table td[data-col="Pfam_hit"],
@@ -324,11 +451,13 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     max-width: 600px;
   }
   #annotation-table tr:last-child td { border-bottom: none; }
-  #annotation-table tr { background-color: var(--row-bg, #fff); transition: background 0.1s; }
-  #annotation-table tr:nth-child(even) { background-color: var(--row-bg-even, #fafaf9); }
-  #annotation-table tr:not(.annotation-row-highlight):hover td { background: rgba(0,0,0,0.03); }
+  #annotation-table tr { background-color: var(--row-bg, transparent); transition: background 0.1s; }
+  #annotation-table tr:nth-child(even) { background-color: var(--row-bg-even, var(--table-bg)); }
+  body.dark #annotation-table tr,
+  body.dark #annotation-table tr:nth-child(even) { background-color: var(--table-bg) !important; }
+  #annotation-table tr:not(.annotation-row-highlight):hover td { background: var(--table-row-hover); }
   #annotation-table tr.annotation-row-highlight td {
-    box-shadow: inset 0 0 0 1000px rgba(0, 0, 0, 0.35);
+    box-shadow: inset 0 0 0 1000px var(--highlight-overlay);
     font-weight: 600;
   }
   .pagination {
@@ -337,41 +466,44 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: #666;
+    color: var(--text-muted);
   }
   .pagination button {
     padding: 4px 10px;
     font-size: 12px;
-    border: 0.5px solid #c0bfb8;
+    border: 0.5px solid var(--btn-border);
     border-radius: 6px;
-    background: #fff;
+    background: var(--btn-bg);
     cursor: pointer;
-    color: #1a1a18;
+    color: var(--btn-text);
   }
-  .pagination button:hover:not(:disabled) { background: #ebebea; }
+  .pagination button:hover:not(:disabled) { background: var(--btn-hover); }
   .pagination button:disabled { opacity: 0.4; cursor: default; }
   .pagination .page-info { margin: 0 4px; }
-  .zoom-hint { font-size: 11px; color: #666; margin-left: auto; }
+  .zoom-hint { font-size: 11px; color: var(--text-muted); margin-left: auto; }
   /* ── Report header ────────────────────────────────────────── */
   .ph-header {
     font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
     border-radius: 12px;
     overflow: hidden;
     margin-bottom: 20px;
+    background: var(--body-bg);
+    border: 0.5px solid var(--border);
   }
   .ph-topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 10px 18px;
-    background: #ebebea;
+    background: var(--header-bg);
+    gap: 10px;
   }
   .ph-tool-badge {
     display: flex;
     align-items: center;
     gap: 8px;
     font-size: 11px;
-    color: #888780;
+    color: var(--header-text);
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
@@ -379,22 +511,22 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #185fa5;
+    background: var(--link);
     flex-shrink: 0;
   }
   .ph-timestamp {
     font-size: 11px;
-    color: #888780;
+    color: var(--header-text);
     letter-spacing: 0.03em;
   }
   .ph-body {
     padding: 16px 20px 18px;
-    background: #ffffff;
+    background: var(--body-bg);
   }
   .ph-contig-id {
     font-size: 17px;
     font-weight: 500;
-    color: #1a1a18;
+    color: var(--text);
     letter-spacing: -0.01em;
     margin: 0 0 14px 0;
     display: flex;
@@ -405,9 +537,9 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   .ph-chip {
     font-size: 10px;
     font-weight: 500;
-    background: #e6f1fb;
-    color: #185fa5;
-    border: 0.5px solid #b5d4f4;
+    background: var(--chip-bg);
+    color: var(--chip-text);
+    border: 0.5px solid var(--chip-border);
     border-radius: 4px;
     padding: 2px 7px;
     white-space: nowrap;
@@ -421,14 +553,14 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     gap: 10px;
   }
   .ph-metric {
-    background: #f5f5f3;
-    border: 0.5px solid #d3d1c7;
+    background: var(--metric-bg);
+    border: 0.5px solid var(--border);
     border-radius: 8px;
     padding: 9px 12px;
   }
   .ph-metric-label {
     font-size: 10px;
-    color: #888780;
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.07em;
     margin-bottom: 4px;
@@ -437,13 +569,13 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   .ph-metric-value {
     font-size: 15px;
     font-weight: 500;
-    color: #1a1a18;
+    color: var(--text);
     letter-spacing: -0.01em;
     white-space: nowrap;
   }
   .ph-metric-value .unit {
     font-size: 11px;
-    color: #5f5e5a;
+    color: var(--text-muted);
     font-weight: 400;
     margin-left: 2px;
   }
@@ -454,25 +586,25 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     width: 100%;
     height: 55px;
     margin-bottom: 3px;
-    border: 0.5px solid #e3e1db;
+    border: 0.5px solid var(--gc-chart-border);
     border-radius: 4px;
-    background: #fafaf9;
+    background: var(--gc-chart-bg);
     position: relative;
     overflow: hidden;
   }
   .gc-chart:last-child { margin-bottom: 0; }
-  .gc-chart svg { display: block; }
+  .gc-chart svg { display: block; background: transparent; }
   .gc-chart path.line {
     fill: none;
     stroke-width: 1.25px;
     stroke-linejoin: round;
     stroke-linecap: round;
   }
-  .gc-chart .axis text { font-size: 9px; fill: #8c8a82; }
-  .gc-chart .axis path, .gc-chart .axis line { stroke: #e0ded8; }
-  .gc-chart .zero-line { stroke: #c9c7c1; stroke-dasharray: 2,2; pointer-events: none; }
+  .gc-chart .axis text { font-size: 9px; fill: var(--gc-axis-text); }
+  .gc-chart .axis path, .gc-chart .axis line { stroke: var(--gc-axis); }
+  .gc-chart .zero-line { stroke: var(--gc-zero); stroke-dasharray: 2,2; pointer-events: none; }
   .gc-chart .crosshair {
-    stroke: #8c8a82;
+    stroke: var(--gc-crosshair);
     stroke-dasharray: 2,2;
     stroke-width: 1px;
     pointer-events: none;
@@ -480,7 +612,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   .gc-chart .gc-title {
     font-size: 9px;
     font-weight: 500;
-    fill: #6b6961;
+    fill: var(--gc-title);
     pointer-events: none;
   }
 </style>
@@ -493,6 +625,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="ph-dot"></div>
       phage_contig_annotator · PHROG annotation pipeline
     </div>
+    <button id="theme-toggle" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
     <div class="ph-timestamp">__HEADER_TIMESTAMP__</div>
   </div>
   <div class="ph-body">
@@ -555,6 +688,26 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const gcCumSkew = __GC_CUM_SKEW_JSON__;
 
   data.forEach(function(d, i) { d._idx = i; });
+
+  // Theme toggle (persisted in localStorage)
+  const docBody = document.body;
+  const themeToggle = document.getElementById("theme-toggle");
+  function updateThemeIcon() {
+    themeToggle.textContent = docBody.classList.contains("dark") ? "\u2600" : "\u263E";
+  }
+  try {
+    const savedTheme = localStorage.getItem("pca-theme");
+    if (savedTheme === "dark") docBody.classList.add("dark");
+    else if (savedTheme === "light") docBody.classList.remove("dark");
+  } catch (e) {}
+  updateThemeIcon();
+  themeToggle.addEventListener("click", function() {
+    docBody.classList.toggle("dark");
+    try {
+      localStorage.setItem("pca-theme", docBody.classList.contains("dark") ? "dark" : "light");
+    } catch (e) {}
+    updateThemeIcon();
+  });
 
   const margin = {top: 55, right: 220, bottom: 55, left: 80};
   const trackHeight = 55;
@@ -643,9 +796,9 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     .text("Reverse (-)");
 
   const axisLabel = plotArea.append("text")
+    .attr("class", "axis-label")
     .attr("y", plotHeight + 40)
     .style("text-anchor", "middle")
-    .style("font-size", "14px")
     .text("Position (bp)");
 
   const tooltip = d3.select("body").append("div")
@@ -727,8 +880,8 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     .attr("y", 0)
     .attr("width", overviewWidth)
     .attr("height", overviewHeight)
-    .attr("fill", "rgba(70,130,180,0.15)")
-    .attr("stroke", "#4682b4")
+    .attr("fill", "var(--overview-viewport-fill)")
+    .attr("stroke", "var(--overview-viewport-stroke)")
     .attr("stroke-width", 2)
     .style("pointer-events", "none");
 
@@ -792,7 +945,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
       g.append("line")
         .attr("x1", 0).attr("x2", w)
         .attr("y1", h).attr("y2", h)
-        .attr("stroke", "#e0ded8")
+        .attr("stroke", "var(--gc-axis)")
         .attr("stroke-width", 0.5);
     }
 
