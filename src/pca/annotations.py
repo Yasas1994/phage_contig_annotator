@@ -272,7 +272,6 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   /* ── Report header ────────────────────────────────────────── */
   .ph-header {
     font-family: "SFMono-Regular", "Consolas", "Liberation Mono", monospace;
-    border: 0.5px solid #c0bfb8;
     border-radius: 12px;
     overflow: hidden;
     max-width: 860px;
@@ -284,7 +283,6 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     justify-content: space-between;
     padding: 10px 18px;
     background: #ebebea;
-    border-bottom: 0.5px solid #d3d1c7;
   }
   .ph-tool-badge {
     display: flex;
