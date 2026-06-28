@@ -99,6 +99,12 @@ Skip tRNA prediction:
 phage_contig_annotator run --input test/bin.460.fna --output output_dir --cpus 10 --skip-trna
 ```
 
+Use a dark color theme for plots:
+
+```bash
+phage_contig_annotator run --input test/bin.460.fna --output output_dir --cpus 10 --theme dark
+```
+
 Run on an existing protein FASTA:
 
 ```bash
@@ -127,6 +133,11 @@ pytest tests/ -v
 
 ## Examples
 
-![image](https://user-images.githubusercontent.com/34155351/201523981-1f5f2fd0-5177-417e-aea0-752430c7eb80.png)
-![image](https://user-images.githubusercontent.com/34155351/201524028-13f35b46-83fb-4c50-af81-3701ef992e48.png)
-![image](https://user-images.githubusercontent.com/34155351/201524110-c4919fd4-aa34-449b-9ba1-7081a278d6af.png)
+A genome map of a contig from the included test data. The figure automatically
+switches between the light and dark theme versions when your system/browser
+toggles between light and dark modes.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/example_dark.png">
+  <img src="docs/images/example_light.png" alt="Genome map of a phage contig annotated with PHROG categories">
+</picture>
