@@ -303,7 +303,8 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   #annotation-table tr:nth-child(even) { background-color: var(--row-bg-even, #fafaf9); }
   #annotation-table tr:not(.annotation-row-highlight):hover td { background: rgba(0,0,0,0.03); }
   #annotation-table tr.annotation-row-highlight td {
-    box-shadow: inset 0 0 0 1000px rgba(255, 255, 255, 0.5);
+    box-shadow: inset 0 0 0 1000px rgba(0, 0, 0, 0.35);
+    font-weight: 600;
   }
   .pagination {
     margin-top: 10px;
@@ -965,10 +966,12 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     rows.exit().remove();
     const rowsEnter = rows.enter().append("tr").style("cursor", "pointer");
     const allRows = rowsEnter.merge(rows);
+    function rowColor(d) {
+      return pastelColor(categoryColors[d.category] || d.color || "#ffffff");
+    }
     allRows
-      .style("--row-bg", function(d) {
-        return pastelColor(categoryColors[d.category] || d.color || "#ffffff");
-      })
+      .style("--row-bg", rowColor)
+      .style("--row-bg-even", rowColor)
       .each(function(d) {
         const row = d3.select(this);
         row.selectAll("td").remove();
