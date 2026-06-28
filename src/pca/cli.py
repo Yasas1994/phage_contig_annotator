@@ -420,7 +420,13 @@ def download_db(ctx: click.Context, path: Path | None) -> None:
     click.echo(f"Updated config.ini with database path: {path}")
 
 
-@main.command()
+@main.group()
+@click.pass_context
+def utils(ctx: click.Context) -> None:
+    """Utility commands for the annotator."""
+
+
+@utils.command("report")
 @click.option(
     "-i",
     "--input",
@@ -460,7 +466,7 @@ def download_db(ctx: click.Context, path: Path | None) -> None:
     help="Color theme for the HTML report.",
 )
 @click.pass_context
-def utils(
+def utils_report(
     ctx: click.Context,
     input_path: Path,
     output_path: Path,

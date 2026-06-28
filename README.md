@@ -170,14 +170,14 @@ If you already have an annotated GenBank or GFF file, you can generate the
 same interactive HTML report without re-running the pipeline:
 
 ```bash
-phage_contig_annotator utils -i genome.gbk -o genome.html
+phage_contig_annotator utils report -i genome.gbk -o genome.html
 ```
 
 For GFF files that do not contain embedded sequences, provide the nucleotide
 FASTA file with `-f`:
 
 ```bash
-phage_contig_annotator utils -i annotations.gff -f contigs.fna -o html_reports/
+phage_contig_annotator utils report -i annotations.gff -f contigs.fna -o html_reports/
 ```
 
 By default one HTML file is written per contig. When the input contains a
