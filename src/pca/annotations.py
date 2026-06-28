@@ -1799,6 +1799,41 @@ def convert_to_html(
     return out_paths
 
 
+def _assign_static_feature_levels(features: Iterable[Any]) -> tuple[int, int]:
+    """Assign non-overlapping y-levels to graphic features by strand.
+
+    Same-strand overlapping features are stacked into separate lanes; forward
+    features are placed above the axis and reverse features below it.  The
+    returned ``(min_level, max_level)`` can be used to set a symmetric y-axis
+    range.
+    """
+    by_strand: dict[int | None, list[Any]] = {1: [], -1: [], None: []}
+    for feature in features:
+        by_strand.setdefault(feature.strand, []).append(feature)
+
+    def _assign(strand_features: list[Any], sign: int) -> None:
+        lane_ends: list[int] = []
+        for feature in sorted(strand_features, key=lambda f: (f.start, f.end)):
+            assigned = -1
+            for i, end in enumerate(lane_ends):
+                if feature.start >= end:
+                    assigned = i
+                    lane_ends[i] = feature.end
+                    break
+            if assigned == -1:
+                assigned = len(lane_ends)
+                lane_ends.append(feature.end)
+            feature.data["fixed_level"] = sign * (assigned + 1)
+
+    _assign(by_strand.get(1, []), 1)
+    _assign(by_strand.get(-1, []), -1)
+    # Strand-less features (e.g. unstranded annotations) are treated like forward.
+    _assign(by_strand.get(None, []), 1)
+
+    levels = [f.data.get("fixed_level", 0) for f in features]
+    return (min(levels), max(levels)) if levels else (0, 0)
+
+
 def _write_static_plot(
     record: Any,
     plots_dir: Path,
@@ -1827,7 +1862,7 @@ def _write_static_plot(
         return {}
 
     class _TallTranslator(BiopythonTranslator):
-        graphic_record_parameters = {"feature_level_height": 2.0, "labels_spacing": 30}
+        graphic_record_parameters = {"feature_level_height": 1.0, "labels_spacing": 30}
 
     with plt.style.context(style):
         graphic_record = _TallTranslator(
@@ -1837,10 +1872,12 @@ def _write_static_plot(
             if feat.label == "unknown function":
                 feat.label = None
 
+        min_level, max_level = _assign_static_feature_levels(graphic_record.features)
+
         plot_kwargs = dict(
             strand_in_label_threshold=7,
             annotate_inline=False,
-            elevate_outline_annotations=True,
+            elevate_outline_annotations=False,
             max_label_length=22,
             max_line_length=18,
         )
@@ -1862,7 +1899,11 @@ def _write_static_plot(
             ax.set_title(record.id)
             axes = [ax]
 
+        level_range = max_level - min_level + 3
+        y_min = (min_level - 1) * graphic_record.feature_level_height
+        y_max = (max_level + 2) * graphic_record.feature_level_height
         for ax in axes:
+            ax.set_ylim(y_min, y_max)
             for text in ax.texts:
                 text.set_rotation(_STATIC_LABEL_ROTATION)
                 text.set_horizontalalignment("left")
@@ -1875,6 +1916,13 @@ def _write_static_plot(
             for tick_label in ax.get_xticklabels():
                 tick_label.set_rotation(30)
                 tick_label.set_horizontalalignment("right")
+
+        # Ensure the figure is tall enough for the deepest lane stack.
+        desired_height = max(4, level_range * graphic_record.feature_level_height)
+        if seq_length > _STATIC_MAX_BPS_PER_LINE:
+            fig.set_size_inches(_STATIC_FIGURE_WIDTH, len(axes) * desired_height)
+        else:
+            fig.set_size_inches(_STATIC_FIGURE_WIDTH, desired_height)
 
         present_categories = {
             _qualifier_to_str(f.qualifiers.get("category"))
