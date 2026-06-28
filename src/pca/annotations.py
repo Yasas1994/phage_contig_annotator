@@ -120,6 +120,29 @@ def _parse_translation_tables(gff_path: str | os.PathLike[str]) -> dict[str, int
     return tables
 
 
+def _genbank_translation_table(record: Any) -> int | None:
+    """Return the NCBI translation table used in a GenBank record.
+
+    The table is first looked up in the record-level annotations, then in the
+    first CDS feature qualifier. ``None`` is returned when no table is found.
+    """
+    table = record.annotations.get("transl_table")
+    if table is not None:
+        try:
+            return int(table)
+        except ValueError:
+            pass
+    for feature in record.features:
+        if feature.type == "CDS":
+            value = _qualifier_to_str(feature.qualifiers.get("transl_table"))
+            if value:
+                try:
+                    return int(value)
+                except ValueError:
+                    continue
+    return None
+
+
 def _iter_gff_records(gff_path: str | os.PathLike[str]) -> Iterator[Any]:
     """Yield Biopython SeqRecord objects from a GFF file."""
     with open(gff_path) as handle:
@@ -165,6 +188,8 @@ def _feature_to_dict(feature: Any) -> dict[str, Any]:
         "end": int(feature.location.end),
         "strand": feature.location.strand or 1,
         "label": _qualifier_to_str(feature.qualifiers.get("label")),
+        "locus_tag": _qualifier_to_str(feature.qualifiers.get("locus_tag")),
+        "product": _qualifier_to_str(feature.qualifiers.get("product")),
         "category": _qualifier_to_str(feature.qualifiers.get("category")),
         "color": _qualifier_to_str(feature.qualifiers.get("color", "#c9c9c9")),
         "phrog": _qualifier_to_str(feature.qualifiers.get("phrog")),
@@ -185,6 +210,8 @@ def _feature_to_dict(feature: Any) -> dict[str, Any]:
 _TABLE_COLUMNS: list[tuple[str, str]] = [
     ("phrog", "PHROG"),
     ("label", "Label"),
+    ("locus_tag", "Locus tag"),
+    ("product", "Product"),
     ("category", "Category"),
     ("hostDomain", "hostDomain"),
     ("Avg_#AA", "Avg #AA"),
@@ -672,8 +699,8 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
         <div class="ph-metric-value">__STRAND_BIAS__</div>
       </div>
       <div class="ph-metric">
-        <div class="ph-metric-label">PHROG hits</div>
-        <div class="ph-metric-value">__PHROG_HITS__ <span class="unit">annotated</span></div>
+        <div class="ph-metric-label">__FEATURE_SUMMARY_LABEL__</div>
+        <div class="ph-metric-value">__FEATURE_SUMMARY_VALUE__</div>
       </div>
       <div class="ph-metric">
         <div class="ph-metric-label">Translation table</div>
@@ -1449,6 +1476,7 @@ def _write_interactive_plot(
     translation_table: int | None = None,
     theme: str = "light",
     out_path: Path | None = None,
+    feature_summary: tuple[str, str] | None = None,
 ) -> None:
     """Write an interactive D3.js HTML genome map for a contig.
 
@@ -1473,6 +1501,9 @@ def _write_interactive_plot(
     out_path:
         Optional explicit output path. When omitted, the file is written to
         ``plots_dir / f"{record.id}.html"``.
+    feature_summary:
+        Optional ``(label, value_html)`` tuple for the feature summary metric
+        in the header. Defaults to ``"PHROG hits"`` / ``"N annotated"``.
     """
     features = [_feature_to_dict(f) for f in record.features]
     features.sort(key=lambda f: (f["start"], f["end"]))
@@ -1492,10 +1523,13 @@ def _write_interactive_plot(
         for key, _header in _TABLE_COLUMNS
         if any(feature.get(key) for feature in features)
     }
+    # PHROG/score/e-value are pipeline-specific; only show them when present.
+    always_cols = {"label", "category", "start", "end", "strand"}
+    pipeline_cols = {"phrog", "score", "eval"} & present_meta_cols
     table_columns = [
         {"key": key, "header": header}
         for key, header in _TABLE_COLUMNS
-        if key in {"phrog", "label", "category", "start", "end", "strand", "score", "eval"}
+        if key in always_cols | pipeline_cols
         or key in present_meta_cols
     ]
     columns_json = json.dumps(table_columns)
@@ -1522,9 +1556,15 @@ def _write_interactive_plot(
     phrog_hits = sum(
         1
         for f in record.features
-        if f.qualifiers.get("category")
-        and f.qualifiers.get("category")[0] not in {"unknown function", "unknown"}
+        if _qualifier_to_str(f.qualifiers.get("category"))
+        not in {"unknown function", "unknown"}
     )
+
+    if feature_summary is None:
+        feature_summary_label = "PHROG hits"
+        feature_summary_value = f'{phrog_hits} <span class="unit">annotated</span>'
+    else:
+        feature_summary_label, feature_summary_value = feature_summary
 
     if translation_table is None:
         translation_value = "Auto <span class=\"unit\">pyrodigal-gv</span>"
@@ -1562,7 +1602,8 @@ def _write_interactive_plot(
         .replace("__CONTIG_LENGTH_FORMATTED__", f"{contig_length:,}")
         .replace("__GC_CONTENT__", gc_value)
         .replace("__STRAND_BIAS__", strand_bias)
-        .replace("__PHROG_HITS__", str(phrog_hits))
+        .replace("__FEATURE_SUMMARY_LABEL__", feature_summary_label)
+        .replace("__FEATURE_SUMMARY_VALUE__", feature_summary_value)
         .replace("__TRANSLATION_TABLE__", translation_value)
         .replace("__GC_POSITIONS_JSON__", json.dumps(positions))
         .replace("__GC_CONTENT_JSON__", json.dumps(gc_values))
@@ -1597,15 +1638,33 @@ _IGNORED_FEATURE_TYPES = frozenset(
 )
 
 
+def _feature_location_key(feature: Any) -> tuple[int, int, int | None]:
+    """Return a hashable key for a feature location."""
+    return (int(feature.location.start), int(feature.location.end), feature.location.strand)
+
+
 def _normalize_features(record: Any) -> None:
     """Ensure SeqFeature qualifiers needed by the HTML report are present.
 
     Features whose type is ``source``, ``region``, ``gap``, etc. are dropped.
+    When both ``gene`` and ``CDS``/RNA features share the same location, the
+    ``gene`` feature is dropped so each gene is represented by a single row.
     For the remaining features a ``label``, ``category`` and ``color`` qualifier
     is added when missing.
     """
     record.features = [
         f for f in record.features if f.type not in _IGNORED_FEATURE_TYPES
+    ]
+
+    non_gene_locs = {
+        _feature_location_key(f)
+        for f in record.features
+        if f.type != "gene"
+    }
+    record.features = [
+        f
+        for f in record.features
+        if not (f.type == "gene" and _feature_location_key(f) in non_gene_locs)
     ]
 
     for feature in record.features:
@@ -1619,7 +1678,7 @@ def _normalize_features(record: Any) -> None:
                     break
             if not label:
                 label = feature.type or "feature"
-            quals["label"] = label
+            quals["label"] = [label]
 
         category = _qualifier_to_str(quals.get("category"))
         if not category:
@@ -1627,11 +1686,11 @@ def _normalize_features(record: Any) -> None:
                 category = "tRNA"
             else:
                 category = "unknown"
-            quals["category"] = category
+            quals["category"] = [category]
 
         color = _qualifier_to_str(quals.get("color"))
         if not color:
-            quals["color"] = _DEFAULT_CATEGORY_COLORS.get(category, "#c9c9c9")
+            quals["color"] = [_DEFAULT_CATEGORY_COLORS.get(category, "#c9c9c9")]
 
 
 def convert_to_html(
@@ -1684,6 +1743,11 @@ def convert_to_html(
 
     category_colors = _load_category_colors(meta_path)
 
+    if suffix in {".gff", ".gff3"}:
+        translation_tables = _parse_translation_tables(input_path)
+    else:
+        translation_tables = {}
+
     if output_path.suffix == ".html":
         if len(records) > 1:
             raise ValueError(
@@ -1699,14 +1763,23 @@ def convert_to_html(
     for record, out_path in zip(records, out_paths):
         _normalize_features(record)
         contig_length = _contig_length(record)
+        if suffix in {".gff", ".gff3"}:
+            translation_table = translation_tables.get(record.id)
+        else:
+            translation_table = _genbank_translation_table(record)
+        feature_count = len(record.features)
         _write_interactive_plot(
             record,
             plots_dir=out_path.parent,
             contig_length=contig_length,
             category_colors=category_colors,
-            translation_table=None,
+            translation_table=translation_table,
             theme=theme,
             out_path=out_path,
+            feature_summary=(
+                "FEATURES",
+                f'{feature_count} <span class="unit">features</span>',
+            ),
         )
         logger.info("wrote interactive HTML report to %s", out_path)
 
