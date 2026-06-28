@@ -62,11 +62,25 @@ conda activate phage_contig_annot
 phage_contig_annotator run --input test/bin.460.fna --output output_dir --cpus 10
 ```
 
-By default the pipeline produces:
+By default the pipeline produces a semantically organized output directory:
 
-- `annotations.gff` — annotated contigs in GFF3 format
-- `annotations.gbk` — annotated contigs in GenBank format
-- `plots/*.pdf` — static genome maps (one per contig)
+```
+output_dir/
+├── annotations/
+│   ├── annotations.gff   # annotated contigs in GFF3 format
+│   └── annotations.gbk   # annotated contigs in GenBank format
+├── genes/
+│   ├── proteins.faa      # predicted protein sequences
+│   └── proteins.gff      # predicted gene coordinates
+├── hmm/
+│   ├── hmmsearch.txt     # HMMER-style tblout
+│   └── hmmsearch.csv     # parsed HMM hit summary
+├── plots/
+│   └── *.pdf             # static genome maps (one per contig)
+└── trna/
+    ├── trna.tsv          # tRNAscan-SE tabular output
+    └── trna.gff          # tRNAscan-SE GFF output
+```
 
 ### Output options
 

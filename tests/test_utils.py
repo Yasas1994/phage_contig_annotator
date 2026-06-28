@@ -321,11 +321,11 @@ class TestAnnotations:
             input_fasta=fna,
         )
 
-        assert (out_dir / "annotations.gff").is_file()
-        assert (out_dir / "annotations.gbk").is_file()
+        assert (out_dir / "annotations" / "annotations.gff").is_file()
+        assert (out_dir / "annotations" / "annotations.gbk").is_file()
         assert (out_dir / "plots" / "contig1.pdf").is_file()
 
-        gbk_records = list(SeqIO.parse(out_dir / "annotations.gbk", "genbank"))
+        gbk_records = list(SeqIO.parse(out_dir / "annotations" / "annotations.gbk", "genbank"))
         assert len(gbk_records) == 1
         assert gbk_records[0].id == "contig1"
         assert len(gbk_records[0].seq) == 903
@@ -367,5 +367,7 @@ class TestAnnotations:
             plot_formats=["html"],
         )
 
+        assert (out_dir / "annotations" / "annotations.gff").is_file()
+        assert (out_dir / "annotations" / "annotations.gbk").is_file()
         assert (out_dir / "plots" / "contig1.html").is_file()
 

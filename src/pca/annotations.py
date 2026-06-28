@@ -380,6 +380,8 @@ def generate_plots_and_annotations(
     tmp_dir = Path(tmp_dir)
     plots_dir = tmp_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
+    annotations_dir = tmp_dir / "annotations"
+    annotations_dir.mkdir(parents=True, exist_ok=True)
 
     requested_formats = set(plot_formats)
     unsupported = requested_formats - SUPPORTED_PLOT_FORMATS
@@ -424,8 +426,8 @@ def generate_plots_and_annotations(
     ].query("score > 50")
 
     logger.info("generating annotations and plots")
-    gff_out_path = tmp_dir / "annotations.gff"
-    gbk_out_path = tmp_dir / "annotations.gbk"
+    gff_out_path = annotations_dir / "annotations.gff"
+    gbk_out_path = annotations_dir / "annotations.gbk"
 
     annotated_records: list[Any] = []
     with open(gff_out_path, "w") as out_handle:

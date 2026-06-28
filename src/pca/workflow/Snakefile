@@ -22,14 +22,14 @@ meta_path = Path(config["meta_path"])
 plot_formats = config.get("plot_formats", ["pdf"])
 translation_table = config.get("translation_table", None)
 
-proteins_faa = output_dir / "proteins.faa"
-proteins_gff = output_dir / "proteins.gff"
-trna_tsv = output_dir / "trna.tsv"
-trna_gff = output_dir / "trna.gff"
-hmmsearch_txt = output_dir / "hmmsearch.txt"
-hmmsearch_csv = output_dir / "hmmsearch.csv"
-annotations_gff = output_dir / "annotations.gff"
-annotations_gbk = output_dir / "annotations.gbk"
+proteins_faa = output_dir / "genes" / "proteins.faa"
+proteins_gff = output_dir / "genes" / "proteins.gff"
+trna_tsv = output_dir / "trna" / "trna.tsv"
+trna_gff = output_dir / "trna" / "trna.gff"
+hmmsearch_txt = output_dir / "hmm" / "hmmsearch.txt"
+hmmsearch_csv = output_dir / "hmm" / "hmmsearch.csv"
+annotations_gff = output_dir / "annotations" / "annotations.gff"
+annotations_gbk = output_dir / "annotations" / "annotations.gbk"
 plots_dir = output_dir / "plots"
 
 
