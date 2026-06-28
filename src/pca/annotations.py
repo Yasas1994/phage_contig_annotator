@@ -1240,7 +1240,7 @@ def generate_plots_and_annotations(
     else:
         trna = None
 
-    phrogs_anno = pd.read_csv(meta_dir)
+    phrogs_anno = pd.read_csv(meta_dir, low_memory=False)
     phrogs_anno = phrogs_anno.rename(
         columns={"#phrog": "phrog", "Annotation": "annot", "Category": "category"}
     )
