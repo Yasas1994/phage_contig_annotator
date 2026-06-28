@@ -253,6 +253,25 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     vertical-align: top;
     cursor: pointer;
   }
+  #annotation-table td.expander-col {
+    width: 80px;
+    min-width: 80px;
+    max-width: 80px;
+    text-align: center;
+    vertical-align: middle;
+    cursor: default;
+  }
+  .row-expander {
+    padding: 2px 6px;
+    font-size: 11px;
+    border: 0.5px solid #c0bfb8;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    color: #185fa5;
+    white-space: nowrap;
+  }
+  .row-expander:hover { background: #e6f1fb; }
   #annotation-table td[data-col="hostDomain"],
   #annotation-table td[data-col="RefSeq"],
   #annotation-table td[data-col="Pfam_hit"],
@@ -260,12 +279,24 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   #annotation-table td[data-col="KO_hit"],
   #annotation-table td[data-col="label"],
   #annotation-table td[data-col="category"] {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 120px;
+    max-width: 220px;
+  }
+  #annotation-table tr.expanded td[data-col="hostDomain"],
+  #annotation-table tr.expanded td[data-col="RefSeq"],
+  #annotation-table tr.expanded td[data-col="Pfam_hit"],
+  #annotation-table tr.expanded td[data-col="GO_hit"],
+  #annotation-table tr.expanded td[data-col="KO_hit"],
+  #annotation-table tr.expanded td[data-col="label"],
+  #annotation-table tr.expanded td[data-col="category"] {
     white-space: normal;
     word-break: break-word;
-    min-width: 220px;
-    max-width: 380px;
     overflow: visible;
     text-overflow: unset;
+    max-width: 600px;
   }
   #annotation-table tr:last-child td { border-bottom: none; }
   #annotation-table tr { background-color: var(--row-bg, #fff); transition: background 0.1s; }
@@ -881,6 +912,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const tableWrap = tableContainer.append("div").attr("class", "table-wrap");
   const table = tableWrap.append("table");
   const theadRow = table.append("thead").append("tr");
+  theadRow.append("th").attr("class", "expander-col").text("");
   tableColumns.forEach(function(col) {
     theadRow.append("th").text(col.header);
   });
@@ -918,6 +950,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
 
   // Click any table cell to highlight the corresponding feature on the map.
   tbody.on("click", function(event) {
+    if (event.target.closest(".row-expander")) return;
     const cell = event.target.closest("td");
     if (!cell) return;
     const row = cell.closest("tr");
@@ -939,6 +972,17 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
       .each(function(d) {
         const row = d3.select(this);
         row.selectAll("td").remove();
+        row.append("td")
+          .attr("class", "expander-col")
+          .append("button")
+          .attr("class", "row-expander")
+          .text(d._expanded ? "see less" : "see more")
+          .on("click", function(event) {
+            event.stopPropagation();
+            d._expanded = !d._expanded;
+            d3.select(this).text(d._expanded ? "see less" : "see more");
+            row.classed("expanded", d._expanded);
+          });
         tableColumns.forEach(function(col) {
           let val = d[col.key];
           if (val === undefined || val === null || val === "") val = "-";
