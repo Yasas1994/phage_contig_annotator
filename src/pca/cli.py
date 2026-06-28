@@ -364,6 +364,7 @@ def run(
         cmd.append("--dry-run")
     if force:
         cmd.append("--forceall")
+        cmd.append("--rerun-incomplete")
 
     env = os.environ.copy()
     src_dir = str(_package_dir().parent)
