@@ -20,6 +20,7 @@ def test_run_help() -> None:
     assert result.exit_code == 0
     assert "--input" in result.output
     assert "--translation-table" in result.output
+    assert "--force" in result.output
 
 
 def test_download_db_help() -> None:

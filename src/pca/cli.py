@@ -293,6 +293,11 @@ def main(ctx: click.Context, quiet: bool) -> None:
     is_flag=True,
     help="Show Snakemake execution plan without running.",
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Force re-execution of all workflow steps.",
+)
 @click.pass_context
 def run(
     ctx: click.Context,
@@ -305,6 +310,7 @@ def run(
     plot_formats: tuple[str, ...],
     translation_table: int | None,
     dry_run: bool,
+    force: bool,
 ) -> None:
     """Run the full annotation pipeline."""
     logger = get_logger(quiet=ctx.obj["quiet"])
@@ -356,6 +362,8 @@ def run(
     ]
     if dry_run:
         cmd.append("--dry-run")
+    if force:
+        cmd.append("--forceall")
 
     env = os.environ.copy()
     src_dir = str(_package_dir().parent)
