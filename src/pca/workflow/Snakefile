@@ -90,7 +90,7 @@ if run_trna:
             from pca.externals import run_trnascan
 
             run_trnascan(
-                out=str(output_dir / "trna"),
+                out=str(output_dir / "trna" / "trna"),
                 in_=str(input.fna),
                 threads=threads,
             )
