@@ -689,7 +689,6 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   <button id="zoom-out">Zoom out</button>
   <button id="zoom-reset">Reset</button>
   <label><input type="checkbox" id="show-labels" checked> Show labels</label>
-  <label><input type="checkbox" id="show-no-phrog"> Show genes without PHROGs</label>
   <span class="zoom-hint">Wheel = zoom &middot; Shift+wheel / horizontal swipe = pan</span>
 </div>
 <div id="overview"></div>
@@ -762,7 +761,6 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   let currentTransform = d3.zoomIdentity;
 
   let showLabels = true;
-  let showNoPhrog = false;
   const minZoom = 1;
   const maxZoom = 50;
   const zoomStep = 1.3;
@@ -1235,13 +1233,6 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     showLabels = this.checked;
     drawLabels();
   });
-  d3.select("#show-no-phrog").on("change", function() {
-    showNoPhrog = this.checked;
-    currentPage = 0;
-    renderTable();
-    renderPagination();
-  });
-
   // Wheel: vertical = zoom, horizontal/shift+wheel = pan.
   overlay.on("wheel", function(event) {
     event.preventDefault();
@@ -1308,8 +1299,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   let currentPage = 0;
 
   function tableData() {
-    if (showNoPhrog) return data;
-    return data.filter(function(d) { return d.phrog || d.trna_type; });
+    return data;
   }
 
   // Click any table cell to highlight the corresponding feature on the map.
@@ -1386,14 +1376,6 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   }
 
   function highlightTableRow(index) {
-    const feature = data[index];
-    if (!feature.phrog && !showNoPhrog) {
-      showNoPhrog = true;
-      d3.select("#show-no-phrog").property("checked", true);
-      currentPage = 0;
-      renderTable();
-      renderPagination();
-    }
     const tData = tableData();
     const localIndex = tData.findIndex(function(d) { return d._idx === index; });
     if (localIndex >= 0) {
