@@ -183,6 +183,21 @@ class TestPyrodigal:
         faa_text = out_faa.read_text()
         assert ">contig1_1" in faa_text
 
+    def test_call_genes_pyrodigal_translation_table(self, tmp_path: Path) -> None:
+        fna = tmp_path / "input.fna"
+        fna.write_text(">contig1\n" + "ATG" * 200 + "TAA\n")
+        out_faa = tmp_path / "proteins.faa"
+        out_gff = tmp_path / "proteins.gff"
+
+        pipeline.call_genes_pyrodigal(
+            fna, out_faa, out_gff, translation_table=4
+        )
+
+        assert out_faa.is_file()
+        assert out_gff.is_file()
+        faa_text = out_faa.read_text()
+        assert ">contig1_1" in faa_text
+
 
 class TestPyhmmer:
     def test_search_hmms_pyhmmer(self, tmp_path: Path) -> None:

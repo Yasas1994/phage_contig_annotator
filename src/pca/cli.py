@@ -244,12 +244,19 @@ def main(ctx: click.Context, quiet: bool) -> None:
     help="Plot output format. Specify multiple times for multiple formats.",
 )
 @click.option(
+    "--translation-table",
+    default=11,
+    show_default=True,
+    type=int,
+    help="NCBI translation table for gene calling. Overrides pyrodigal-gv metagenomic mode.",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Show Snakemake execution plan without running.",
 )
 @click.pass_context
-def runall(
+def run(
     ctx: click.Context,
     input_path: Path,
     output_dir: Path,
@@ -258,6 +265,7 @@ def runall(
     db_dir: Path | None,
     cpus: int,
     plot_formats: tuple[str, ...],
+    translation_table: int,
     dry_run: bool,
 ) -> None:
     """Run the full annotation pipeline."""
@@ -293,6 +301,7 @@ def runall(
         "meta_path": str(Path(meta_path).resolve()),
         "run_trna": not skip_trna,
         "plot_formats": list(plot_formats),
+        "translation_table": translation_table,
     }
 
     config_path = output_dir / "config.yaml"

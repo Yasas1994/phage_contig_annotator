@@ -59,7 +59,7 @@ Activate the environment and run the full pipeline:
 
 ```bash
 conda activate phage_contig_annot
-phage_contig_annotator runall --input test/bin.460.fna --output output_dir --cpus 10
+phage_contig_annotator run --input test/bin.460.fna --output output_dir --cpus 10
 ```
 
 By default the pipeline produces:
@@ -73,7 +73,7 @@ By default the pipeline produces:
 Generate **interactive HTML** plots in addition to PDFs:
 
 ```bash
-phage_contig_annotator runall --input test/bin.460.fna --output output_dir --cpus 10 \
+phage_contig_annotator run --input test/bin.460.fna --output output_dir --cpus 10 \
   --plot-format pdf --plot-format html
 ```
 
@@ -82,19 +82,25 @@ Other plot formats: `pdf` (default), `png`, `html`. Specify `--plot-format` mult
 Skip tRNA prediction:
 
 ```bash
-phage_contig_annotator runall --input test/bin.460.fna --output output_dir --cpus 10 --skip-trna
+phage_contig_annotator run --input test/bin.460.fna --output output_dir --cpus 10 --skip-trna
 ```
 
 Run on an existing protein FASTA:
 
 ```bash
-phage_contig_annotator runall --input proteins.faa --output output_dir --type proteins --cpus 10
+phage_contig_annotator run --input proteins.faa --output output_dir --type proteins --cpus 10
+```
+
+Override the gene-calling translation table (default is auto-selection in metagenomic mode):
+
+```bash
+phage_contig_annotator run --input test/bin.460.fna --output output_dir --cpus 10 --translation-table 4
 ```
 
 Preview the Snakemake execution plan without running:
 
 ```bash
-phage_contig_annotator runall --input test/bin.460.fna --output output_dir --cpus 10 --dry-run
+phage_contig_annotator run --input test/bin.460.fna --output output_dir --cpus 10 --dry-run
 ```
 
 ## Development

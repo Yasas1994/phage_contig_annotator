@@ -20,6 +20,7 @@ run_trna = config.get("run_trna", True)
 db_dir = Path(config["db_dir"])
 meta_path = Path(config["meta_path"])
 plot_formats = config.get("plot_formats", ["pdf"])
+translation_table = config.get("translation_table", None)
 
 proteins_faa = output_dir / "proteins.faa"
 proteins_gff = output_dir / "proteins.gff"
@@ -58,6 +59,7 @@ if input_type == "contigs":
                 output.faa,
                 output.gff,
                 threads=threads,
+                translation_table=translation_table,
             )
 
 else:

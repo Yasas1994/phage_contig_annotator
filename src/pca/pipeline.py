@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 import pyhmmer
+import pyrodigal
 import pyrodigal_gv
 from pyhmmer.easel import Alphabet, SequenceFile
 from pyhmmer.plan7 import HMM, HMMFile
@@ -94,8 +95,14 @@ def call_genes_pyrodigal(
     out_faa: str | os.PathLike[str],
     out_gff: str | os.PathLike[str],
     threads: int = 1,
+    translation_table: int | None = None,
 ) -> None:
-    """Predict genes with pyrodigal-gv and write proteins + GFF."""
+    """Predict genes with pyrodigal-gv and write proteins + GFF.
+
+    When ``translation_table`` is given, run in single-genome mode with that
+    table. Otherwise use pyrodigal-gv's default metagenomic mode, which
+    automatically selects among viral models.
+    """
     in_fna = Path(in_fna)
     out_faa = Path(out_faa)
     out_gff = Path(out_gff)
@@ -103,7 +110,17 @@ def call_genes_pyrodigal(
     out_gff.parent.mkdir(parents=True, exist_ok=True)
 
     logger.info("gene calling with pyrodigal-gv: %s", in_fna)
-    orf_finder = pyrodigal_gv.ViralGeneFinder(meta=True)
+    if translation_table is None:
+        orf_finder = pyrodigal_gv.ViralGeneFinder(meta=True)
+    else:
+        training_info = pyrodigal.TrainingInfo(
+            gc=0.5,
+            translation_table=translation_table,
+        )
+        orf_finder = pyrodigal_gv.ViralGeneFinder(
+            training_info=training_info,
+            meta=False,
+        )
 
     with open(out_faa, "w") as faa_fh, open(out_gff, "w") as gff_fh:
         for seq_id, seq in read_fasta(in_fna):
