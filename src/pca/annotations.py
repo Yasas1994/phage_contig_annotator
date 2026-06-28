@@ -172,13 +172,16 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__TITLE__</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
   body { font-family: Arial, Helvetica, sans-serif; margin: 20px; background: #fff; }
-  #controls { margin-bottom: 10px; }
-  #controls button, #controls label { margin-right: 10px; padding: 4px 8px; }
-  #chart { width: 100%; overflow-x: auto; border: 1px solid #eee; }
+  #controls { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  #controls button, #controls label { padding: 4px 8px; }
+  #overview { width: 100%; height: 34px; margin-bottom: 6px; border: 1px solid #ddd; background: #fafafa; }
+  #chart { width: 100%; overflow: hidden; border: 1px solid #eee; cursor: grab; touch-action: none; }
+  #chart:active { cursor: grabbing; }
   .axis path, .axis line { fill: none; stroke: #333; shape-rendering: crispEdges; }
   .axis text { font-size: 12px; }
   .track-label { font-size: 12px; font-weight: bold; fill: #333; }
@@ -215,17 +218,22 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   .pagination { margin-top: 10px; }
   .pagination button { margin: 0 5px; padding: 4px 8px; }
   .pagination .page-info { margin: 0 10px; }
+  .zoom-hint { font-size: 11px; color: #666; margin-left: auto; }
 </style>
 </head>
 <body>
 <h3 style="text-align:center;">__TITLE__</h3>
 <div id="controls">
+  <button id="pan-left">&larr; Pan</button>
+  <button id="pan-right">Pan &rarr;</button>
   <button id="zoom-in">Zoom in</button>
   <button id="zoom-out">Zoom out</button>
   <button id="zoom-reset">Reset</button>
   <label><input type="checkbox" id="show-labels" checked> Show labels</label>
   <label><input type="checkbox" id="show-no-phrog"> Show genes without PHROGs</label>
+  <span class="zoom-hint">Wheel = zoom &middot; Shift+wheel / horizontal swipe = pan</span>
 </div>
+<div id="overview"></div>
 <div id="chart"></div>
 <div id="annotation-table"></div>
 <script>
@@ -237,8 +245,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
 
   data.forEach(function(d, i) { d._idx = i; });
 
-  const margin = {top: 60, right: 220, bottom: 70, left: 80};
-  const basePlotWidth = Math.max(900, Math.min(1800, contigLength / 35));
+  const margin = {top: 55, right: 220, bottom: 55, left: 80};
   const trackHeight = 55;
   const trackGap = 35;
   const forwardY = trackHeight / 2;
@@ -246,36 +253,70 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const trackHeightTotal = reverseY + trackHeight / 2 + 20;
   const legendRowHeight = 44;
   const legendHeight = legendRowHeight * Object.keys(categoryColors).length + 30;
-  const baseHeight = Math.max(trackHeightTotal, legendHeight);
+  const plotHeight = Math.max(trackHeightTotal, legendHeight);
+  const overviewHeight = 34;
 
-  let zoomLevel = 1;
-  const minZoom = 0.5;
-  const maxZoom = 10;
-  const zoomStep = 1.2;
+  const chartDiv = document.getElementById("chart");
+  let width = Math.max(600, chartDiv.clientWidth) - margin.left - margin.right;
+
+  const x = d3.scaleLinear().domain([0, contigLength]).range([0, width]);
+  let currentXScale = x.copy();
+  let currentTransform = d3.zoomIdentity;
+
   let showLabels = true;
   let showNoPhrog = false;
+  const minZoom = 1;
+  const maxZoom = 50;
+  const zoomStep = 1.3;
+  const panStep = 0.2;
 
-  const x = d3.scaleLinear().domain([0, contigLength]);
-
+  // --- Main SVG ---
   const svg = d3.select("#chart")
     .append("svg")
-    .attr("height", baseHeight + margin.top + margin.bottom);
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", plotHeight + margin.top + margin.bottom)
+    .style("display", "block");
 
-  const defs = svg.append("defs");
-  const clipRect = defs.append("clipPath")
-      .attr("id", "plot-clip")
-    .append("rect")
-      .attr("height", baseHeight);
-
-  const g = svg.append("g")
+  const plotWrapper = svg.append("g")
       .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-  const staticGroup = g.append("g").attr("class", "static-group");
-  const plotArea = g.append("g").attr("class", "plot-area").attr("clip-path", "url(#plot-clip)");
+  plotWrapper.append("defs").append("clipPath")
+      .attr("id", "plot-clip")
+    .append("rect")
+      .attr("width", width)
+      .attr("height", plotHeight);
+
+  const plotArea = plotWrapper.append("g")
+      .attr("class", "plot-area")
+      .attr("clip-path", "url(#plot-clip)");
+
+  const staticGroup = plotWrapper.append("g").attr("class", "static-group");
+
+  // --- Zoom behavior ---
+  const zoom = d3.zoom()
+    .scaleExtent([minZoom, maxZoom])
+    .extent([[0, 0], [width, plotHeight]])
+    .translateExtent([[0, 0], [width, plotHeight]])
+    .on("zoom", function(event) {
+      currentTransform = event.transform;
+      currentXScale = event.transform.rescaleX(x);
+      updateView();
+    });
+
+  // Invisible capture surface on top for pan/zoom and hover/click.
+  const overlay = plotWrapper.append("rect")
+    .attr("width", width)
+    .attr("height", plotHeight)
+    .style("fill", "none")
+    .style("pointer-events", "all")
+    .call(zoom);
+
   const geneGroup = plotArea.append("g").attr("class", "gene-group");
   const labelGroup = plotArea.append("g").attr("class", "label-group");
-  const axisGroup = g.append("g").attr("class", "axis");
-  const legendGroup = g.append("g").attr("class", "legend-group");
+  const axisGroup = plotArea.append("g").attr("class", "axis");
+  const legendGroup = svg.append("g")
+      .attr("class", "legend-group")
+      .attr("transform", "translate(" + (width + margin.left + 20) + ",20)");
 
   staticGroup.append("text")
     .attr("class", "track-label")
@@ -293,15 +334,8 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     .attr("dominant-baseline", "middle")
     .text("Reverse (-)");
 
-  staticGroup.append("line")
-    .attr("class", "center-line")
-    .attr("y1", forwardY).attr("y2", forwardY);
-  staticGroup.append("line")
-    .attr("class", "center-line")
-    .attr("y1", reverseY).attr("y2", reverseY);
-
-  const axisLabel = g.append("text")
-    .attr("y", baseHeight + 50)
+  const axisLabel = plotArea.append("text")
+    .attr("y", plotHeight + 40)
     .style("text-anchor", "middle")
     .style("font-size", "14px")
     .text("Position (bp)");
@@ -313,11 +347,59 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const arrowHeadBp = Math.max(150, contigLength * 0.006);
   const featureHeight = 22;
 
+  // --- Overview bar ---
+  const overviewDiv = d3.select("#overview");
+  const overviewWidth = overviewDiv.node().clientWidth;
+  const overviewSvg = overviewDiv.append("svg")
+    .attr("width", overviewWidth)
+    .attr("height", overviewHeight);
+  const overviewX = d3.scaleLinear().domain([0, contigLength]).range([0, overviewWidth]);
+  const overviewGroup = overviewSvg.append("g");
+
+  overviewGroup.selectAll(".overview-gene")
+    .data(data.filter(function(d) { return d.phrog || d.label; }))
+    .enter()
+    .append("rect")
+    .attr("class", "overview-gene")
+    .attr("x", function(d) { return overviewX(d.start); })
+    .attr("y", function(d) { return d.strand === 1 ? 2 : 18; })
+    .attr("width", function(d) { return Math.max(1, overviewX(d.end) - overviewX(d.start)); })
+    .attr("height", 14)
+    .attr("fill", function(d) { return categoryColors[d.category] || d.color || "#c9c9c9"; })
+    .attr("stroke", "none");
+
+  const viewportRect = overviewGroup.append("rect")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", overviewWidth)
+    .attr("height", overviewHeight)
+    .attr("fill", "rgba(70,130,180,0.15)")
+    .attr("stroke", "#4682b4")
+    .attr("stroke-width", 2)
+    .style("pointer-events", "none");
+
+  function updateOverview() {
+    const visibleMin = Math.max(0, currentXScale.invert(0));
+    const visibleMax = Math.min(contigLength, currentXScale.invert(width));
+    viewportRect
+      .attr("x", overviewX(visibleMin))
+      .attr("width", Math.max(2, overviewX(visibleMax) - overviewX(visibleMin)));
+  }
+
+  overviewSvg.on("click", function(event) {
+    const [mx] = d3.pointer(event, overviewGroup.node());
+    const bp = Math.max(0, Math.min(contigLength, overviewX.invert(mx)));
+    const targetK = Math.max(1, currentTransform.k);
+    const tx = width / 2 - targetK * x(bp);
+    const newTransform = d3.zoomIdentity.translate(tx, 0).scale(targetK);
+    overlay.call(zoom.transform, clampTransform(newTransform));
+  });
+
   function genePath(d) {
-    const start = x(d.start);
-    const end = x(d.end);
+    const start = currentXScale(d.start);
+    const end = currentXScale(d.end);
     const w = Math.max(0, end - start);
-    const headPixels = Math.min(x(arrowHeadBp) - x(0), w / 2);
+    const headPixels = Math.min(currentXScale(arrowHeadBp) - currentXScale(0), w / 2);
     const cy = d.strand === 1 ? forwardY : reverseY;
     const y0 = cy - featureHeight / 2;
     const y1 = cy + featureHeight / 2;
@@ -404,7 +486,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     }));
     const labelsEnter = labels.enter().append("text").attr("class", "label");
     labelsEnter.merge(labels)
-      .attr("x", function(d) { return (x(d.start) + x(d.end)) / 2; })
+      .attr("x", function(d) { return (currentXScale(d.start) + currentXScale(d.end)) / 2; })
       .attr("y", function(d) {
         const cy = d.strand === 1 ? forwardY : reverseY;
         return d.strand === 1 ? cy - featureHeight / 2 - 4 : cy + featureHeight / 2 + 12;
@@ -453,42 +535,54 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
       .text(function(d) { return d[0]; });
   }
 
-  function updateZoom() {
-    const plotWidth = basePlotWidth * zoomLevel;
-    const width = plotWidth - margin.left - margin.right;
-    svg.attr("width", width + margin.left + margin.right);
-    clipRect.attr("width", width);
-    x.range([0, width]);
-
-    staticGroup.selectAll(".center-line")
-      .attr("x1", 0).attr("x2", width);
-
-    axisGroup.attr("transform", "translate(0," + (baseHeight + 15) + ")")
-      .call(d3.axisBottom(x).ticks(10).tickFormat(function(d) {
+  function updateView() {
+    axisGroup.attr("transform", "translate(0," + (plotHeight + 15) + ")")
+      .call(d3.axisBottom(currentXScale).ticks(10).tickFormat(function(d) {
         if (d >= 1000000) return (d / 1000000).toFixed(1) + "M";
         if (d >= 1000) return (d / 1000).toFixed(d % 1000 === 0 ? 0 : 1) + "k";
         return d;
       }));
 
     axisLabel.attr("x", width / 2);
-    legendGroup.attr("transform", "translate(" + (width + 20) + ",20)");
 
     geneGroup.selectAll(".gene").attr("d", genePath);
     drawLabels();
+    updateOverview();
+  }
+
+  function setZoom(level, centerPixel) {
+    const k = Math.max(minZoom, Math.min(maxZoom, level));
+    const cx = centerPixel === undefined ? width / 2 : centerPixel;
+    // New transform: scale around cx, keep current translation as much as possible.
+    const tx = cx - k * (cx - currentTransform.x) / currentTransform.k;
+    const newTransform = d3.zoomIdentity.translate(tx, 0).scale(k);
+    overlay.call(zoom.transform, clampTransform(newTransform));
+  }
+
+  function clampTransform(t) {
+    const tx = Math.min(0, Math.max(width * (1 - t.k), t.x));
+    return d3.zoomIdentity.translate(tx, 0).scale(t.k);
+  }
+
+  function panBy(fraction) {
+    const visibleSpan = currentXScale.invert(width) - currentXScale.invert(0);
+    const shiftBp = fraction * visibleSpan;
+    const tx = currentTransform.x - currentTransform.k * x(shiftBp);
+    const newTransform = d3.zoomIdentity.translate(tx, 0).scale(currentTransform.k);
+    overlay.call(zoom.transform, clampTransform(newTransform));
   }
 
   d3.select("#zoom-in").on("click", function() {
-    zoomLevel = Math.min(maxZoom, zoomLevel * zoomStep);
-    updateZoom();
+    setZoom(currentTransform.k * zoomStep, width / 2);
   });
   d3.select("#zoom-out").on("click", function() {
-    zoomLevel = Math.max(minZoom, zoomLevel / zoomStep);
-    updateZoom();
+    setZoom(currentTransform.k / zoomStep, width / 2);
   });
   d3.select("#zoom-reset").on("click", function() {
-    zoomLevel = 1;
-    updateZoom();
+    overlay.call(zoom.transform, d3.zoomIdentity);
   });
+  d3.select("#pan-left").on("click", function() { panBy(-panStep); });
+  d3.select("#pan-right").on("click", function() { panBy(panStep); });
   d3.select("#show-labels").on("change", function() {
     showLabels = this.checked;
     drawLabels();
@@ -500,14 +594,23 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     renderPagination();
   });
 
-  svg.on("wheel", function(event) {
+  // Wheel: vertical = zoom, horizontal/shift+wheel = pan.
+  overlay.on("wheel", function(event) {
     event.preventDefault();
-    if (event.deltaY < 0) {
-      zoomLevel = Math.min(maxZoom, zoomLevel * zoomStep);
+    const isPan = event.shiftKey || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+    const point = d3.pointer(event, overlay.node());
+    if (isPan) {
+      const dx = event.deltaX || event.deltaY;
+      const tx = currentTransform.x - dx;
+      const newTransform = d3.zoomIdentity.translate(tx, 0).scale(currentTransform.k);
+      overlay.call(zoom.transform, clampTransform(newTransform));
     } else {
-      zoomLevel = Math.max(minZoom, zoomLevel / zoomStep);
+      const factor = event.deltaY < 0 ? zoomStep : 1 / zoomStep;
+      const k = Math.max(minZoom, Math.min(maxZoom, currentTransform.k * factor));
+      const tx = point[0] - k * (point[0] - currentTransform.x) / currentTransform.k;
+      const newTransform = d3.zoomIdentity.translate(tx, 0).scale(k);
+      overlay.call(zoom.transform, clampTransform(newTransform));
     }
-    updateZoom();
   });
 
   function pastelColor(hex) {
@@ -522,60 +625,95 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const tableContainer = d3.select("#annotation-table");
   tableContainer.append("h4")
     .text("Annotations");
-
-  const table = tableContainer.append("table");
-  const thead = table.append("thead").append("tr");
-  thead.selectAll("th")
-    .data(tableColumns)
-    .enter()
-    .append("th")
-    .text(function(d) { return d.header; });
-
-  const tbody = table.append("tbody");
+  const table = tableContainer.append("table").append("thead").append("tr");
+  tableColumns.forEach(function(col) {
+    table.append("th").text(col.header);
+  });
+  const tbody = tableContainer.select("table").append("tbody");
+  const paginationDiv = tableContainer.append("div").attr("class", "pagination");
+  paginationDiv.append("button")
+    .attr("id", "page-prev")
+    .text("Previous")
+    .on("click", function() {
+      if (currentPage > 0) {
+        currentPage--;
+        renderTable();
+        renderPagination();
+      }
+    });
+  paginationDiv.append("span").attr("class", "page-info");
+  paginationDiv.append("button")
+    .attr("id", "page-next")
+    .text("Next")
+    .on("click", function() {
+      if ((currentPage + 1) * rowsPerPage < tableData().length) {
+        currentPage++;
+        renderTable();
+        renderPagination();
+      }
+    });
 
   const rowsPerPage = 10;
   let currentPage = 0;
 
   function tableData() {
-    return showNoPhrog ? data : data.filter(function(d) { return d.phrog; });
-  }
-
-  function cellValue(d, col) {
-    if (col.key === "strand") return d.strand === 1 ? "+" : "-";
-    if (col.key === "phrog") return d.phrog || (d.trna_type ? "tRNA-" + d.trna_type : "-");
-    const v = d[col.key];
-    return (v === 0 || v) ? v : "-";
+    if (showNoPhrog) return data;
+    return data.filter(function(d) { return d.phrog || d.trna_type; });
   }
 
   function renderTable() {
     const tData = tableData();
-    const start = currentPage * rowsPerPage;
-    const pageData = tData.slice(start, start + rowsPerPage);
-
+    const pageData = tData.slice(currentPage * rowsPerPage, (currentPage + 1) * rowsPerPage);
     const rows = tbody.selectAll("tr").data(pageData, function(d) { return d._idx; });
     rows.exit().remove();
     const rowsEnter = rows.enter().append("tr")
-      .attr("class", "annotation-row");
-
-    rowsEnter.merge(rows)
-      .attr("id", function(d) { return "annotation-row-" + d._idx; })
-      .attr("data-index", function(d) { return d._idx; })
-      .style("--row-bg", function(d) {
-        const c = categoryColors[d.category] || d.color;
-        return c ? pastelColor(c) : null;
-      })
+      .style("cursor", "pointer")
       .on("click", function(event, d) {
         d3.selectAll(".gene").classed("selected", false);
-        d3.select(".gene[data-index='" + d._idx + "']").classed("selected", true);
-        d3.selectAll("#annotation-table tr").classed("annotation-row-highlight", false);
-        d3.select(this).classed("annotation-row-highlight", true);
+        d3.select('.gene[data-index="' + d._idx + '"]').classed("selected", true);
+        highlightFeature(d._idx);
       });
+    const allRows = rowsEnter.merge(rows);
+    allRows
+      .style("--row-bg", function(d) {
+        const col = categoryColors[d.category] || d.color || "#ffffff";
+        return pastelColor(col);
+      })
+      .each(function(d) {
+        const row = d3.select(this);
+        row.selectAll("td").remove();
+        tableColumns.forEach(function(col) {
+          let val = d[col.key];
+          if (val === undefined || val === null || val === "") val = "-";
+          row.append("td").text(val);
+        });
+      });
+  }
 
-    const cells = rowsEnter.merge(rows).selectAll("td").data(function(d) {
-      return tableColumns.map(function(col) { return cellValue(d, col); });
-    });
-    cells.enter().append("td").merge(cells).text(function(d) { return d; });
-    cells.exit().remove();
+  function renderPagination() {
+    const tData = tableData();
+    const totalPages = Math.ceil(tData.length / rowsPerPage) || 1;
+    if (currentPage >= totalPages) currentPage = totalPages - 1;
+    paginationDiv.select(".page-info")
+      .text("Page " + (currentPage + 1) + " of " + totalPages + " (" + tData.length + " features)");
+    paginationDiv.select("#page-prev").property("disabled", currentPage === 0);
+    paginationDiv.select("#page-next").property("disabled", (currentPage + 1) >= totalPages);
+  }
+
+  function highlightFeature(index) {
+    const feature = data[index];
+    const startBp = feature.start;
+    const endBp = feature.end;
+    const centerBp = (startBp + endBp) / 2;
+    const visibleSpan = currentXScale.invert(width) - currentXScale.invert(0);
+    // If feature is outside the visible window, center on it.
+    if (centerBp < currentXScale.invert(0) || centerBp > currentXScale.invert(width) || visibleSpan > contigLength * 0.9) {
+      const targetK = currentTransform.k > 2 ? currentTransform.k : 3;
+      const tx = width / 2 - targetK * x(centerBp);
+      const newTransform = d3.zoomIdentity.translate(tx, 0).scale(targetK);
+      overlay.call(zoom.transform, clampTransform(newTransform));
+    }
+    highlightTableRow(index);
   }
 
   function highlightTableRow(index) {
@@ -588,57 +726,27 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
       renderPagination();
     }
     const tData = tableData();
-    const localIndex = tData.indexOf(feature);
-    const totalPages = Math.ceil(tData.length / rowsPerPage);
-    const page = Math.floor(localIndex / rowsPerPage);
-    if (page !== currentPage && page >= 0 && page < totalPages) {
-      currentPage = page;
-      renderTable();
-      renderPagination();
+    const localIndex = tData.findIndex(function(d) { return d._idx === index; });
+    if (localIndex >= 0) {
+      const page = Math.floor(localIndex / rowsPerPage);
+      if (page !== currentPage) {
+        currentPage = page;
+        renderTable();
+        renderPagination();
+      }
+      tbody.selectAll("tr").classed("annotation-row-highlight", function(d) {
+        return d._idx === index;
+      });
+      const rowNode = tbody.selectAll("tr").filter(function(d) { return d._idx === index; }).node();
+      if (rowNode) rowNode.scrollIntoView({ behavior: "smooth", block: "center" });
     }
-    d3.selectAll("#annotation-table tr").classed("annotation-row-highlight", false);
-    const row = d3.select("#annotation-row-" + index);
-    row.classed("annotation-row-highlight", true);
-    const rowNode = row.node();
-    if (rowNode) rowNode.scrollIntoView({behavior: "smooth", block: "center"});
   }
-
-  const pagination = tableContainer.append("div").attr("class", "pagination");
-  const prevButton = pagination.append("button").text("Previous");
-  const pageInfo = pagination.append("span").attr("class", "page-info");
-  const nextButton = pagination.append("button").text("Next");
-
-  function renderPagination() {
-    const tData = tableData();
-    const totalPages = Math.ceil(tData.length / rowsPerPage);
-    pageInfo.text("Page " + (currentPage + 1) + " of " + totalPages + " (" + tData.length + " features)");
-    prevButton.property("disabled", currentPage === 0);
-    nextButton.property("disabled", currentPage >= totalPages - 1);
-  }
-
-  prevButton.on("click", function() {
-    if (currentPage > 0) {
-      currentPage--;
-      renderTable();
-      renderPagination();
-    }
-  });
-
-  nextButton.on("click", function() {
-    const totalPages = Math.ceil(tableData().length / rowsPerPage);
-    if (currentPage < totalPages - 1) {
-      currentPage++;
-      renderTable();
-      renderPagination();
-    }
-  });
-
-  renderTable();
-  renderPagination();
 
   drawGenes();
   drawLegend();
-  updateZoom();
+  updateView();
+  renderTable();
+  renderPagination();
 })();
 </script>
 </body>
