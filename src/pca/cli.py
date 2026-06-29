@@ -4,17 +4,19 @@ from __future__ import annotations
 
 import configparser
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 import click
 import requests
 import tqdm
 
 from pca import annotations, validation
+from pca.io import convert_to_fasta
 from pca.logutils import get_logger
 
 
@@ -23,7 +25,36 @@ def _package_dir() -> Path:
     return Path(__file__).parent.resolve()
 
 
+def _normalize_input_fasta(input_path: Path, output_dir: Path) -> Path:
+    """Ensure the pipeline input is a FASTA file.
+
+    GenBank (.gb, .gbk) and EMBL inputs are converted to a multi-FASTA file
+    inside ``output_dir``. Already-FASTA inputs are returned unchanged.
+    """
+    from pca.io import detect_sequence_format
+
+    fmt = detect_sequence_format(input_path)
+    if fmt == "fasta":
+        return input_path
+
+    normalized = output_dir / "input.fasta"
+    convert_to_fasta(input_path, normalized)
+    return normalized
+
+
 _DEFAULT_DB_DIR: Path = _package_dir().parents[1] / "databases"
+
+# Optional extra databases searched with HMMER (hmmsearch for .hmm profiles,
+# phmmer for protein FASTA databases). DefenseFinder is run as an external
+# tool but exposed through the same interface.
+_EXTRA_DB_NAMES = [
+    "card",
+    "vfdb",
+    "anticrisprdb",
+    "netflax",
+    "dgr",
+    "defensefinder",
+]
 
 
 def _load_config() -> configparser.ConfigParser:
@@ -234,7 +265,7 @@ def main(ctx: click.Context, quiet: bool) -> None:
     "input_path",
     required=True,
     type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
-    help="Path to input FASTA file with contigs or proteins.",
+    help="Path to input FASTA, GenBank (.gb, .gbk) or EMBL file with contigs or proteins.",
 )
 @click.option(
     "-o",
@@ -250,6 +281,14 @@ def main(ctx: click.Context, quiet: bool) -> None:
     default="contigs",
     type=click.Choice(["contigs", "proteins"], case_sensitive=False),
     help="Input type (default: contigs).",
+)
+@click.option(
+    "--gene-caller",
+    "gene_caller",
+    default="pyrodigal-gv",
+    show_default=True,
+    type=click.Choice(["pyrodigal-gv", "phanotate"], case_sensitive=False),
+    help="Gene prediction method for contigs (ignored for protein inputs).",
 )
 @click.option(
     "--skip-trna",
@@ -268,6 +307,33 @@ def main(ctx: click.Context, quiet: bool) -> None:
     default=None,
     type=click.Path(exists=True, file_okay=False, readable=True, path_type=Path),
     help="Use a custom HMM database directory.",
+)
+@click.option(
+    "--extra-db-root",
+    "extra_db_root",
+    default=None,
+    type=click.Path(file_okay=False, readable=True, path_type=Path),
+    help="Root directory for optional extra databases. Defaults to <db>/extra.",
+)
+@click.option(
+    "--extra-db",
+    "extra_dbs",
+    multiple=True,
+    type=click.Choice(_EXTRA_DB_NAMES, case_sensitive=False),
+    help="Enable an optional extra database. Specify multiple times.",
+)
+@click.option(
+    "--extra-eval",
+    "extra_evalue",
+    default=1e-5,
+    show_default=True,
+    type=float,
+    help="E-value threshold for optional extra database searches.",
+)
+@click.option(
+    "--run-defensefinder",
+    is_flag=True,
+    help="Run DefenseFinder to detect anti-phage defense systems.",
 )
 @click.option(
     "--cpus",
@@ -316,9 +382,14 @@ def run(
     input_path: Path,
     output_dir: Path,
     input_type: str,
+    gene_caller: str,
     skip_trna: bool,
     skip_trf: bool,
     db_dir: Path | None,
+    extra_db_root: Path | None,
+    extra_dbs: tuple[str, ...],
+    extra_evalue: float,
+    run_defensefinder: bool,
     cpus: int,
     plot_formats: tuple[str, ...],
     translation_table: int | None,
@@ -352,11 +423,50 @@ def run(
     if run_trf:
         validation.check_executables(["trf"])
 
-    output_dir.mkdir(parents=True, exist_ok=True)
+    gene_caller = gene_caller.lower()
+    if input_type == "contigs" and gene_caller == "phanotate":
+        if not (shutil.which("phanotate.py") or shutil.which("phanotate")):
+            raise click.UsageError(
+                "Gene caller 'phanotate' was selected but PHANOTATE is not on PATH. "
+                "Install it (`pip install phanotate`) or choose 'pyrodigal-gv'."
+            )
 
-    workflow_config = {
+    extra_dbs_list = list(extra_dbs)
+    if run_defensefinder and "defensefinder" not in extra_dbs_list:
+        extra_dbs_list.append("defensefinder")
+    if "defensefinder" in extra_dbs_list:
+        run_defensefinder = True
+
+    extra_db_root_path = extra_db_root or db_dir / "extra"
+    if extra_dbs_list:
+        for db in extra_dbs_list:
+            if db == "defensefinder":
+                validation.check_executables(["defense-finder"])
+                continue
+            db_path = extra_db_root_path / db
+            if not db_path.exists():
+                raise click.UsageError(
+                    f"Extra database directory does not exist: {db_path}"
+                )
+            has_models = (
+                any(db_path.glob("*.hmm"))
+                or any(
+                    p.suffix.lower() in {".faa", ".fasta", ".fa"}
+                    for p in db_path.iterdir()
+                )
+            )
+            if not has_models:
+                raise click.UsageError(
+                    f"Extra database {db_path} must contain .hmm files or a protein FASTA"
+                )
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    input_path = _normalize_input_fasta(input_path, output_dir)
+
+    workflow_config: dict[str, Any] = {
         "input": str(input_path.resolve()),
         "input_type": input_type,
+        "gene_caller": gene_caller,
         "output_dir": str(output_dir.resolve()),
         "db_dir": str(db_dir.resolve()),
         "meta_path": str(Path(meta_path).resolve()),
@@ -365,6 +475,10 @@ def run(
         "plot_formats": list(plot_formats),
         "translation_table": translation_table,
         "theme": theme,
+        "extra_db_root": str(extra_db_root_path.resolve()) if extra_db_root else None,
+        "extra_dbs": extra_dbs_list,
+        "extra_evalue": extra_evalue,
+        "run_defensefinder": run_defensefinder,
     }
 
     config_path = output_dir / "config.yaml"

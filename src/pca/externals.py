@@ -1,8 +1,9 @@
 """Wrappers for external bioinformatics binaries.
 
 ``prodigal-gv`` and ``hmmsearch`` have been replaced by Python libraries
-(``pyrodigal-gv`` and ``pyhmmer``); ``tRNAscan-SE`` and Tandem Repeats Finder
-(``trf``) are the remaining external dependencies.
+(``pyrodigal-gv`` and ``pyhmmer``); ``tRNAscan-SE``, Tandem Repeats Finder
+(``trf``), PHANOTATE, and DefenseFinder are the remaining external
+dependencies.
 """
 
 from __future__ import annotations
@@ -14,7 +15,15 @@ import subprocess as sp
 from pathlib import Path
 from typing import Any
 
-__all__ = ["run_trf", "run_trnascan"]
+__all__ = ["run_defensefinder", "run_phanotate", "run_trf", "run_trnascan"]
+
+
+def _phanotate_executable() -> str:
+    """Return the PHANOTATE command available on PATH, preferring ``phanotate.py``."""
+    for cmd in ("phanotate.py", "phanotate"):
+        if shutil.which(cmd):
+            return cmd
+    return "phanotate.py"
 
 
 def _run_tool(
@@ -50,15 +59,37 @@ def _run_tool(
         return False
 
 
+def run_defensefinder(out: str, in_: str, threads: int = 1) -> bool:
+    """Run DefenseFinder on a protein FASTA file.
+
+    DefenseFinder detects anti-phage defense systems using profile HMMs and
+    system-specific rules. It writes ``defense_finder_genes.tsv`` and
+    ``defense_finder_systems.tsv`` under ``out``.
+    """
+    out_path = Path(out)
+    out_path.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        "defense-finder",
+        "run",
+        "-w", str(threads),
+        "--out-dir", str(out_path),
+        in_,
+    ]
+    return _run_tool(cmd, f"{out}.log", f"{out}.cmd")
+
+
 def run_trf(out: str, in_: str, threads: int = 1) -> bool:
     """Run Tandem Repeats Finder (TRF) on a nucleotide FASTA file.
 
-    TRF always writes its ``.dat`` output next to the input file, so the input
+    ``out`` is treated as a prefix; the final TRF table is written to
+    ``{out}.dat``. TRF writes its output next to the input file, so the input
     is copied into the output directory, the command is run there, and the
-    resulting ``.dat`` file is moved to ``out``.
+    resulting ``.dat`` file is moved to ``{out}.dat``. If TRF produces no
+    repeats and therefore no ``.dat`` file, an empty ``{out}.dat`` is created
+    so downstream steps have a stable input.
     """
     in_path = Path(in_).resolve()
-    out_path = Path(out)
+    out_path = Path(f"{out}.dat")
     work_dir = out_path.parent
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -73,11 +104,31 @@ def run_trf(out: str, in_: str, threads: int = 1) -> bool:
     expected = work_dir / f"{in_path.name}.{dot_params}.dat"
     if success and expected.exists():
         expected.rename(out_path)
+    elif success and not out_path.exists():
+        out_path.touch()
 
     if local_fasta.exists():
         local_fasta.unlink()
 
-    return success and out_path.exists()
+    return out_path.exists()
+
+
+def run_phanotate(in_: str, out: str, threads: int = 1) -> bool:
+    """Run PHANOTATE on a nucleotide FASTA file and write a GFF3 file.
+
+    PHANOTATE is a gene caller specialized for phage genomes. The wrapper
+    invokes ``phanotate.py`` (or ``phanotate`` as a fallback) and requests
+    GFF3 output.
+    """
+    out_path = Path(out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        _phanotate_executable(),
+        in_,
+        "-o", str(out_path),
+        "-f", "gff3",
+    ]
+    return _run_tool(cmd, f"{out}.log", f"{out}.cmd")
 
 
 def run_trnascan(out: str, in_: str, threads: int = 1) -> bool:

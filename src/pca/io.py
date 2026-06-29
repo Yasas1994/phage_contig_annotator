@@ -7,6 +7,7 @@ import gzip
 import logging
 import lzma
 import os
+import shutil
 from collections.abc import Iterator
 from enum import Enum, auto
 from pathlib import Path
@@ -16,7 +17,15 @@ from Bio import SeqIO
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["Compression", "check_fasta", "get_compressed_file_handle", "is_compressed", "read_fasta"]
+__all__ = [
+    "Compression",
+    "check_fasta",
+    "convert_to_fasta",
+    "detect_sequence_format",
+    "get_compressed_file_handle",
+    "is_compressed",
+    "read_fasta",
+]
 
 
 class Compression(Enum):
@@ -52,6 +61,64 @@ def get_compressed_file_handle(path: str | os.PathLike[str]) -> TextIO:
     if compression == Compression.xz:
         return lzma.open(path, "rt")
     return open(path, "r")
+
+
+def _first_non_blank_line(path: str | os.PathLike[str]) -> str | None:
+    """Return the first non-empty line of a possibly-compressed text file."""
+    with get_compressed_file_handle(path) as handle:
+        for line in handle:
+            stripped = line.strip()
+            if stripped:
+                return stripped
+    return None
+
+
+def detect_sequence_format(path: str | os.PathLike[str]) -> str:
+    """Detect whether ``path`` is FASTA, GenBank, or EMBL.
+
+    Returns one of ``"fasta"``, ``"genbank"``, ``"embl"``, or ``"unknown"``.
+    Detection is based on the first non-empty line of the (possibly
+    compressed) file.
+    """
+    first_line = _first_non_blank_line(path)
+    if first_line is None:
+        return "unknown"
+    if first_line.startswith(">"):
+        return "fasta"
+    if first_line.startswith("LOCUS"):
+        return "genbank"
+    if first_line.startswith("ID   "):
+        return "embl"
+    return "unknown"
+
+
+def convert_to_fasta(
+    input_path: str | os.PathLike[str],
+    output_path: str | os.PathLike[str],
+) -> None:
+    """Convert a GenBank or EMBL file to a multi-FASTA file.
+
+    Raises ``ValueError`` if the input format cannot be determined or if no
+    records are found.
+    """
+    fmt = detect_sequence_format(input_path)
+    if fmt == "unknown":
+        raise ValueError(
+            f"Unable to determine sequence format for {input_path}. "
+            "Expected FASTA, GenBank, or EMBL."
+        )
+    if fmt == "fasta":
+        shutil.copy2(input_path, output_path)
+        return
+
+    seq_format = "genbank" if fmt == "genbank" else "embl"
+    count = SeqIO.write(
+        SeqIO.parse(get_compressed_file_handle(input_path), seq_format),
+        output_path,
+        "fasta",
+    )
+    if count == 0:
+        raise ValueError(f"No sequences found in {input_path}.")
 
 
 def read_fasta(path: str | os.PathLike[str]) -> Iterator[tuple[str, str]]:

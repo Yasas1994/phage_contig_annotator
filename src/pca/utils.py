@@ -19,6 +19,8 @@ from pca.externals import run_trnascan
 from pca.io import (
     Compression,
     check_fasta,
+    convert_to_fasta,
+    detect_sequence_format,
     get_compressed_file_handle,
     is_compressed,
     read_fasta,
@@ -27,11 +29,18 @@ from pca.logutils import get_logger
 from pca.parallel import async_parallel
 from pca.parsers import (
     parse_blastp,
+    parse_defensefinder_genes,
     parse_hmmsearch,
     parse_trna,
     parse_trna_gff,
 )
-from pca.pipeline import call_genes_pyrodigal, search_hmms_pyhmmer
+from pca.pipeline import (
+    call_genes_phanotate,
+    call_genes_pyrodigal,
+    search_extra_db,
+    search_hmms_pyhmmer,
+    search_phmmer_pyhmmer,
+)
 from pca.validation import (
     check_executables,
     dbname,
@@ -43,6 +52,8 @@ __all__ = [
     # io
     "Compression",
     "check_fasta",
+    "convert_to_fasta",
+    "detect_sequence_format",
     "get_compressed_file_handle",
     "is_compressed",
     "read_fasta",
@@ -59,6 +70,7 @@ __all__ = [
     "run_trnascan",
     # parsers
     "parse_blastp",
+    "parse_defensefinder_genes",
     "parse_hmmsearch",
     "parse_trna",
     "parse_trna_gff",
@@ -70,6 +82,9 @@ __all__ = [
     "get_coordinates",
     "get_cordinates",
     # pipeline
+    "call_genes_phanotate",
     "call_genes_pyrodigal",
+    "search_extra_db",
     "search_hmms_pyhmmer",
+    "search_phmmer_pyhmmer",
 ]

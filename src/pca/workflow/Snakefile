@@ -17,6 +17,7 @@ from pathlib import Path
 input_path = Path(config["input"])
 output_dir = Path(config["output_dir"])
 input_type = config.get("input_type", "contigs")
+gene_caller = config.get("gene_caller", "pyrodigal-gv")
 run_trna = config.get("run_trna", True)
 run_trf = config.get("run_trf", True) and input_type == "contigs"
 db_dir = Path(config["db_dir"])
@@ -24,6 +25,21 @@ meta_path = Path(config["meta_path"])
 plot_formats = config.get("plot_formats", ["pdf"])
 translation_table = config.get("translation_table", None)
 theme = config.get("theme", "light")
+
+extra_db_root = config.get("extra_db_root", None)
+extra_dbs = config.get("extra_dbs", [])
+extra_evalue = config.get("extra_evalue", 1e-5)
+run_defensefinder = config.get("run_defensefinder", False)
+
+extra_dir = output_dir / "extra"
+defensefinder_dir = output_dir / "defensefinder"
+defensefinder_genes_tsv = defensefinder_dir / "defense_finder_genes.tsv"
+
+
+def _extra_db_path(db):
+    """Resolve the path for an optional extra database."""
+    root = Path(extra_db_root) if extra_db_root else db_dir / "extra"
+    return root / db
 
 proteins_faa = output_dir / "genes" / "proteins.faa"
 proteins_gff = output_dir / "genes" / "proteins.gff"
@@ -49,7 +65,7 @@ rule all:
 if input_type == "contigs":
 
     rule gene_calling:
-        """Predict genes with pyrodigal-gv."""
+        """Predict genes with the selected gene caller."""
         input:
             fna=input_path,
         output:
@@ -57,15 +73,25 @@ if input_type == "contigs":
             gff=proteins_gff,
         threads: workflow.cores
         run:
-            from pca.pipeline import call_genes_pyrodigal
+            if gene_caller == "phanotate":
+                from pca.pipeline import call_genes_phanotate
 
-            call_genes_pyrodigal(
-                input.fna,
-                output.faa,
-                output.gff,
-                threads=threads,
-                translation_table=translation_table,
-            )
+                call_genes_phanotate(
+                    input.fna,
+                    output.faa,
+                    output.gff,
+                    threads=threads,
+                )
+            else:
+                from pca.pipeline import call_genes_pyrodigal
+
+                call_genes_pyrodigal(
+                    input.fna,
+                    output.faa,
+                    output.gff,
+                    threads=threads,
+                    translation_table=translation_table,
+                )
 
 else:
 
@@ -165,6 +191,49 @@ rule hmmsearch:
         )
 
 
+rule extra_hmmsearch:
+    """Search proteins against an optional extra HMM/protein database."""
+    input:
+        faa=proteins_faa,
+    output:
+        txt=extra_dir / "{db}.txt",
+        csv=extra_dir / "{db}.csv",
+    threads: workflow.cores
+    params:
+        db_path=lambda wc: _extra_db_path(wc.db),
+        evalue=extra_evalue,
+    run:
+        from pca.pipeline import search_extra_db
+
+        search_extra_db(
+            input.faa,
+            params.db_path,
+            output.txt,
+            output.csv,
+            threads=threads,
+            evalue=params.evalue,
+        )
+
+
+if run_defensefinder:
+
+    rule defensefinder:
+        """Detect anti-phage defense systems with DefenseFinder."""
+        input:
+            faa=proteins_faa,
+        output:
+            genes=defensefinder_genes_tsv,
+        threads: workflow.cores
+        run:
+            from pca.externals import run_defensefinder
+
+            run_defensefinder(
+                out=str(defensefinder_dir),
+                in_=str(input.faa),
+                threads=threads,
+            )
+
+
 rule annotate:
     """Generate annotated GFF/GenBank and per-contig plots."""
     input:
@@ -173,6 +242,8 @@ rule annotate:
         trf_dat=trf_dat,
         proteins_gff=proteins_gff if input_type == "contigs" else [],
         meta=meta_path,
+        extra_csvs=expand(str(extra_dir / "{db}.csv"), db=extra_dbs) if extra_dbs else [],
+        defensefinder_tsv=str(defensefinder_genes_tsv) if run_defensefinder else [],
     output:
         gff=annotations_gff,
         gbk=annotations_gbk,
@@ -181,6 +252,13 @@ rule annotate:
         from pca.annotations import generate_plots_and_annotations
 
         gff_input = input.proteins_gff if input_type == "contigs" else str(proteins_gff)
+        extra_hits = {
+            db: str(extra_dir / f"{db}.csv")
+            for db in extra_dbs
+        }
+        defensefinder_input = None
+        if run_defensefinder and input.defensefinder_tsv:
+            defensefinder_input = input.defensefinder_tsv[0]
 
         generate_plots_and_annotations(
             tmp_dir=output_dir,
@@ -193,4 +271,6 @@ rule annotate:
             plot_formats=plot_formats,
             translation_table=translation_table,
             theme=theme,
+            extra_hits=extra_hits or None,
+            defensefinder_tsv=defensefinder_input,
         )

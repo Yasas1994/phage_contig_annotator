@@ -37,6 +37,152 @@ def test_run_requires_input_and_output(tmp_path) -> None:
     assert "Missing option" in result.output
 
 
+def test_run_help_includes_gene_caller() -> None:
+    runner = CliRunner()
+    result = runner.invoke(cli.main, ["run", "--help"])
+    assert result.exit_code == 0
+    assert "--gene-caller" in result.output
+
+
+def _make_minimal_db(db_dir: Path) -> None:
+    db_dir.mkdir(parents=True, exist_ok=True)
+    (db_dir / "test.hmm").write_text("dummy")
+    (db_dir / "PHROG_annot_v4.csv").write_text("#phrog,Annotation,Category,color\n")
+
+
+def test_run_rejects_phanotate_when_not_installed(tmp_path: Path, monkeypatch) -> None:
+    db_dir = tmp_path / "db"
+    _make_minimal_db(db_dir)
+    input_fna = tmp_path / "input.fna"
+    input_fna.write_text(">contig1\n" + "ATG" * 20 + "TAA\n")
+
+    empty_bin = tmp_path / "empty_bin"
+    empty_bin.mkdir()
+    monkeypatch.setenv("PATH", str(empty_bin))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        [
+            "run",
+            "-i", str(input_fna),
+            "-o", str(tmp_path / "out"),
+            "--db", str(db_dir),
+            "--gene-caller", "phanotate",
+            "--skip-trna",
+            "--skip-trf",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "PHANOTATE is not on PATH" in result.output
+
+
+def test_run_writes_gene_caller_to_config(tmp_path: Path, monkeypatch) -> None:
+    import os
+    import subprocess
+
+    db_dir = tmp_path / "db"
+    _make_minimal_db(db_dir)
+    input_fna = tmp_path / "input.fna"
+    input_fna.write_text(">contig1\n" + "ATG" * 20 + "TAA\n")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "phanotate.py").write_text("#!/usr/bin/env python\nprint(1)\n")
+    (bin_dir / "phanotate.py").chmod(0o755)
+    monkeypatch.setenv(
+        "PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+    )
+
+    captured: list[dict] = []
+
+    def fake_run(cmd, **kwargs):
+        captured.append({"cmd": cmd, "kwargs": kwargs})
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr("pca.cli.subprocess.run", fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        [
+            "run",
+            "-i", str(input_fna),
+            "-o", str(tmp_path / "out"),
+            "--db", str(db_dir),
+            "--gene-caller", "phanotate",
+            "--skip-trna",
+            "--skip-trf",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured
+
+    import yaml
+    config_path = tmp_path / "out" / "config.yaml"
+    assert config_path.is_file()
+    config = yaml.safe_load(config_path.read_text())
+    assert config["gene_caller"] == "phanotate"
+
+
+def test_run_converts_genbank_input_to_fasta(tmp_path: Path, monkeypatch) -> None:
+    import os
+    import subprocess
+
+    from Bio import SeqIO
+    from Bio.Seq import Seq
+
+    db_dir = tmp_path / "db"
+    _make_minimal_db(db_dir)
+
+    input_gb = tmp_path / "input.fa"
+    record = SeqIO.SeqRecord(
+        Seq("ATG" * 20 + "TAA"),
+        id="contig1",
+        description="test phage",
+        annotations={"molecule_type": "DNA"},
+    )
+    SeqIO.write(record, input_gb, "genbank")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "phanotate.py").write_text("#!/usr/bin/env python\nprint(1)\n")
+    (bin_dir / "phanotate.py").chmod(0o755)
+    monkeypatch.setenv(
+        "PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+    )
+
+    def fake_run(cmd, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr("pca.cli.subprocess.run", fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        [
+            "run",
+            "-i", str(input_gb),
+            "-o", str(tmp_path / "out"),
+            "--db", str(db_dir),
+            "--gene-caller", "phanotate",
+            "--skip-trna",
+            "--skip-trf",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    import yaml
+    config_path = tmp_path / "out" / "config.yaml"
+    with open(config_path) as fh:
+        config = yaml.safe_load(fh)
+
+    assert config["input"].endswith("input.fasta")
+    fasta_path = Path(config["input"])
+    assert fasta_path.is_file()
+    assert ">contig1" in fasta_path.read_text()
+
+
 def test_discover_databases_finds_flat_layout(tmp_path) -> None:
     (tmp_path / "test.hmm").write_text("dummy")
     (tmp_path / "PHROG_annot_v4.csv").write_text("dummy")

@@ -7,10 +7,13 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "parse_blastp",
+    "parse_defensefinder_genes",
     "parse_hmmsearch",
     "parse_trf_dat",
     "parse_trna",
@@ -34,6 +37,31 @@ def parse_blastp(path: str | Path) -> Iterator[dict[str, Any]]:
                 names[i]: formats[i](values[i])
                 for i in range(12)
             }
+
+
+def parse_defensefinder_genes(path: str | Path) -> Iterator[dict[str, Any]]:
+    """Parse DefenseFinder ``defense_finder_genes.tsv``.
+
+    Returns one record per gene hit, keyed with ``qname`` (protein ID),
+    ``gene_name`` (DefenseFinder gene/model name), ``system`` and ``type``.
+    """
+    path = Path(path)
+    if not path.is_file() or path.stat().st_size == 0:
+        return
+    try:
+        df = pd.read_csv(path, sep="\t")
+    except pd.errors.EmptyDataError:
+        return
+    if "hit_id" not in df.columns or "gene_name" not in df.columns:
+        logger.warning("DefenseFinder genes file missing expected columns: %s", path)
+        return
+    for row in df.itertuples(index=False):
+        yield {
+            "qname": str(row.hit_id),
+            "gene_name": str(row.gene_name),
+            "system": str(getattr(row, "sys_id", "")),
+            "type": str(getattr(row, "subtype", "")),
+        }
 
 
 def parse_hmmsearch(path: str | Path) -> Iterator[dict[str, Any]]:

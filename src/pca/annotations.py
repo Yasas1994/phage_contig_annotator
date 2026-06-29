@@ -20,6 +20,13 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqUtils import gc_fraction
 from BCBio import GFF
 from dna_features_viewer import BiopythonTranslator
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from matplotlib.ticker import FuncFormatter, MaxNLocator
+from matplotlib.transforms import Bbox
 
 from pca.parsers import parse_hmmsearch, parse_trf_dat, parse_trna_gff
 
@@ -37,30 +44,54 @@ logger = logging.getLogger(__name__)
 DEFAULT_PLOT_FORMATS = ("pdf",)
 SUPPORTED_PLOT_FORMATS = {"pdf", "png", "html"}
 
+# Display label/category used when a CDS has no PHROG HMM hit.
+_NO_PHROG_MATCH_CATEGORY = "no phrogs match"
+
+# Display category used when a CDS has a PHROG hit but the PHROG metadata
+# does not assign it a functional category.
+_UNKNOWN_FUNCTION_CATEGORY = "unknown function"
+
 # Fallback colors used for standalone HTML conversion when no PHROG metadata
 # CSV is supplied. The palette matches the default PHROG category colors.
 _DEFAULT_CATEGORY_COLORS: dict[str, str] = {
-    "head and packaging": "#1f77b4",
-    "tail": "#2ca02c",
-    "lysis": "#d62728",
-    "DNA, RNA and nucleotide metabolism": "#ff7f0e",
-    "integration and excision": "#9467bd",
-    "transcription regulation": "#8c564b",
-    "connector": "#e377c2",
-    "moron, auxiliary metabolic gene and host takeover": "#7f7f7f",
-    "other": "#bcbd22",
-    "unknown": "#c9c9c9",
-    "unknown function": "#c9c9c9",
+    "head and packaging": "#3e83f6",
+    "tail": "#07e9a2",
+    "lysis": "#f35f49",
+    "DNA, RNA and nucleotide metabolism": "#ffdf59",
+    "integration and excision": "#fea328",
+    "transcription regulation": "#a861e3",
+    "connector": "#35d7ff",
+    "moron, auxiliary metabolic gene and host takeover": "#ff59f5",
+    "other": "#808000",
+    _UNKNOWN_FUNCTION_CATEGORY: "#c9c9c9",
+    _NO_PHROG_MATCH_CATEGORY: "#a0a0a0",
     "tRNA": "#e377c2",
     "tandem repeat": "#17becf",
+    # Optional extra database categories
+    "antimicrobial resistance": "#d62728",
+    "virulence factor": "#e377c2",
+    "anti-phage defense": "#9467bd",
+    "anti-CRISPR": "#bcbd22",
+    "toxin-antitoxin": "#8c564b",
+    "diversity-generating retroelement": "#17becf",
+}
+
+# Map optional extra-database names to their display category.
+_EXTRA_DB_CATEGORIES: dict[str, str] = {
+    "card": "antimicrobial resistance",
+    "vfdb": "virulence factor",
+    "defensefinder": "anti-phage defense",
+    "anticrisprdb": "anti-CRISPR",
+    "netflax": "toxin-antitoxin",
+    "dgr": "diversity-generating retroelement",
 }
 
 # Static plot layout tunables.
 _STATIC_FIGURE_WIDTH = 24  # inches
 _STATIC_MAX_BPS_PER_LINE = 50_000
-_STATIC_LABEL_ROTATION = 45
 _STATIC_PNG_DPI = 300
-_STATIC_LABEL_FONTSIZE = 6.5
+_STATIC_LABEL_FONTSIZE = 9
+_STATIC_LABEL_MAX_LEN = 35
 
 
 def get_coordinates(x: pd.Series) -> pd.Series:
@@ -206,7 +237,7 @@ def _qualifier_to_str(value: Any) -> str:
 
 def _feature_to_dict(feature: Any) -> dict[str, Any]:
     """Return a JSON-serializable dict describing a SeqFeature."""
-    return {
+    result: dict[str, Any] = {
         "start": int(feature.location.start),
         "end": int(feature.location.end),
         "strand": feature.location.strand or 1,
@@ -232,6 +263,14 @@ def _feature_to_dict(feature: Any) -> dict[str, Any]:
         "consensus": _qualifier_to_str(feature.qualifiers.get("consensus")),
         "entropy": _qualifier_to_str(feature.qualifiers.get("entropy")),
     }
+    for db_name in _EXTRA_DB_CATEGORIES:
+        result[f"{db_name}_hit"] = _qualifier_to_str(feature.qualifiers.get(f"{db_name}_hit"))
+        result[f"{db_name}_evalue"] = _qualifier_to_str(feature.qualifiers.get(f"{db_name}_evalue"))
+        result[f"{db_name}_score"] = _qualifier_to_str(feature.qualifiers.get(f"{db_name}_score"))
+    result["defensefinder_hit"] = _qualifier_to_str(feature.qualifiers.get("defensefinder_hit"))
+    result["defensefinder_system"] = _qualifier_to_str(feature.qualifiers.get("defensefinder_system"))
+    result["defensefinder_type"] = _qualifier_to_str(feature.qualifiers.get("defensefinder_type"))
+    return result
 
 
 _TABLE_COLUMNS: list[tuple[str, str]] = [
@@ -252,6 +291,12 @@ _TABLE_COLUMNS: list[tuple[str, str]] = [
     ("copies", "Copies"),
     ("consensus", "Consensus"),
     ("entropy", "Entropy"),
+    *[(f"{db}_hit", db.upper()) for db in _EXTRA_DB_CATEGORIES],
+]
+_TABLE_COLUMNS += [
+    ("defensefinder_hit", "DefenseFinder"),
+    ("defensefinder_system", "Defense system"),
+    ("defensefinder_type", "Defense type"),
     ("start", "Start"),
     ("end", "End"),
     ("strand", "Strand"),
@@ -442,7 +487,38 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   .legend-box { stroke: var(--legend-box-stroke); stroke-width: 1px; }
   .legend-title { font-weight: bold; font-size: 13px; fill: var(--text); }
   .legend-label { font-size: 12px; line-height: 1.2; word-wrap: break-word; color: var(--text); }
-  #annotation-table { margin-top: 28px; }
+  #legend { margin-top: 18px; }
+  .legend-grid-title {
+    font-weight: bold;
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .legend-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px 14px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text);
+    min-width: 0;
+  }
+  .legend-swatch {
+    width: 12px;
+    height: 12px;
+    border: 0.5px solid var(--legend-box-stroke);
+    flex-shrink: 0;
+  }
+  .legend-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #annotation-table { margin-top: 16px; }
   #annotation-table h4 {
     margin: 0 0 10px 0;
     font-size: 13px;
@@ -756,6 +832,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   <div class="gc-chart" id="gc-cumskew-chart"></div>
 </div>
 <div id="chart"></div>
+<div id="legend"></div>
 <div id="annotation-table"></div>
 
 <script>
@@ -800,7 +877,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     updateThemeIcon();
   });
 
-  const margin = {top: 55, right: 220, bottom: 55, left: 80};
+  const margin = {top: 55, right: 20, bottom: 55, left: 80};
   const trackHeight = 55;
   const trackGap = 35;
   const featureHeight = 22;
@@ -852,9 +929,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const forwardY = lanePadding + trackHeight / 2;
   const reverseY = forwardY + trackHeight + trackGap;
   const trackHeightTotal = reverseY + trackHeight / 2 + lanePadding;
-  const legendRowHeight = 44;
-  const legendHeight = legendRowHeight * Object.keys(categoryColors).length + 30;
-  const plotHeight = Math.max(trackHeightTotal, legendHeight);
+  const plotHeight = trackHeightTotal;
   const overviewHeight = 55;
 
   const chartDiv = document.getElementById("chart");
@@ -911,9 +986,6 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
   const geneGroup = plotArea.append("g").attr("class", "gene-group");
   const labelGroup = plotArea.append("g").attr("class", "label-group");
   const axisGroup = plotArea.append("g").attr("class", "axis");
-  const legendGroup = svg.append("g")
-      .attr("class", "legend-group")
-      .attr("transform", "translate(" + (width + margin.left + 20) + ",20)");
 
   staticGroup.append("text")
     .attr("class", "track-label")
@@ -1199,7 +1271,8 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
       return;
     }
     const labels = labelGroup.selectAll(".label").data(data.filter(function(d) {
-      return d.label && d.label.toLowerCase() !== "unknown function";
+      return d.label && d.label.toLowerCase() !== "unknown function"
+             && d.label.toLowerCase() !== "no phrogs match";
     }));
     const labelsEnter = labels.enter().append("text").attr("class", "label");
     labelsEnter.merge(labels)
@@ -1222,33 +1295,26 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     const legendItems = Object.entries(categoryColors);
     if (legendItems.length === 0) return;
 
-    legendGroup.selectAll("*").remove();
-    legendGroup.append("text")
-      .attr("class", "legend-title")
-      .attr("x", 0)
-      .attr("y", 0)
+    const legend = d3.select("#legend");
+    legend.selectAll("*").remove();
+    legend.append("div")
+      .attr("class", "legend-grid-title")
       .text("Category");
 
-    const rows = legendGroup.selectAll(".legend-item")
+    const grid = legend.append("div").attr("class", "legend-grid");
+    const items = grid.selectAll(".legend-item")
       .data(legendItems)
       .enter()
-      .append("g")
-      .attr("class", "legend-item")
-      .attr("transform", function(d, i) { return "translate(0," + ((i + 1) * legendRowHeight) + ")"; });
+      .append("div")
+      .attr("class", "legend-item");
 
-    rows.append("rect")
-      .attr("width", 12)
-      .attr("height", 12)
-      .attr("fill", function(d) { return d[1]; })
-      .attr("class", "legend-box");
+    items.append("div")
+      .attr("class", "legend-swatch")
+      .style("background-color", function(d) { return d[1]; });
 
-    rows.append("foreignObject")
-      .attr("x", 18)
-      .attr("y", -2)
-      .attr("width", 190)
-      .attr("height", legendRowHeight)
-      .append("xhtml:div")
-      .attr("class", "legend-label")
+    items.append("div")
+      .attr("class", "legend-text")
+      .attr("title", function(d) { return d[0]; })
       .text(function(d) { return d[0]; });
   }
 
@@ -1547,7 +1613,7 @@ def _write_interactive_plot(
         ``plots_dir / f"{record.id}.html"``.
     feature_summary:
         Optional ``(label, value_html)`` tuple for the feature summary metric
-        in the header. Defaults to ``"PHROG hits"`` / ``"N annotated"``.
+        in the header. Defaults to ``"PHROG hits"`` / ``"N/M annotated"``.
     """
     features = [_feature_to_dict(f) for f in record.features]
     features.sort(key=lambda f: (f["start"], f["end"]))
@@ -1597,16 +1663,20 @@ def _write_interactive_plot(
     else:
         strand_bias = "Balanced"
 
+    total_genes = sum(1 for f in record.features if f.type == "CDS")
     phrog_hits = sum(
         1
         for f in record.features
-        if _qualifier_to_str(f.qualifiers.get("category"))
-        not in {"unknown function", "unknown"}
+        if f.type == "CDS"
+        and _qualifier_to_str(f.qualifiers.get("category"))
+        not in {_UNKNOWN_FUNCTION_CATEGORY, _NO_PHROG_MATCH_CATEGORY}
     )
 
     if feature_summary is None:
         feature_summary_label = "PHROG hits"
-        feature_summary_value = f'{phrog_hits} <span class="unit">annotated</span>'
+        feature_summary_value = (
+            f'{phrog_hits}/{total_genes} <span class="unit">annotated</span>'
+        )
     else:
         feature_summary_label, feature_summary_value = feature_summary
 
@@ -1729,7 +1799,7 @@ def _normalize_features(record: Any) -> None:
             if feature.type == "tRNA":
                 category = "tRNA"
             else:
-                category = "unknown"
+                category = _NO_PHROG_MATCH_CATEGORY
             quals["category"] = [category]
 
         color = _qualifier_to_str(quals.get("color"))
@@ -1865,6 +1935,174 @@ def _assign_static_feature_levels(features: Iterable[Any]) -> tuple[int, int]:
     return (min(levels), max(levels)) if levels else (0, 0)
 
 
+def _format_genome_coord(x: float) -> str:
+    """Format a genome coordinate with K/M suffixes."""
+    if x >= 1_000_000:
+        value = x / 1_000_000
+        formatted = f"{value:.1f}".rstrip("0").rstrip(".")
+        return f"{formatted}M"
+    if x >= 1_000:
+        value = x / 1_000
+        formatted = f"{value:.1f}".rstrip("0").rstrip(".")
+        return f"{formatted}K"
+    return str(int(x))
+
+
+def _truncate_label(label: str | None, max_len: int = _STATIC_LABEL_MAX_LEN) -> str | None:
+    """Return ``label`` truncated to ``max_len`` characters with an ellipsis."""
+    if not label:
+        return label
+    if len(label) > max_len:
+        return label[:max_len].rstrip() + "..."
+    return label
+
+
+def _hide_label_leader_lines(
+    ax: Any, positions: Sequence[tuple[float, float]], tol: float = 0.5
+) -> None:
+    """Hide leader lines attached to label positions that have been hidden."""
+    for line in ax.lines:
+        xdata, ydata = line.get_data()
+        if len(xdata) != 2:
+            continue
+        for tx, ty in positions:
+            if (
+                (abs(xdata[0] - tx) < tol and abs(ydata[0] - ty) < tol)
+                or (abs(xdata[1] - tx) < tol and abs(ydata[1] - ty) < tol)
+            ):
+                line.set_visible(False)
+                break
+
+
+def _drop_overlapping_labels(ax: Any, padding_pt: float = 3.0) -> list[tuple[float, float]]:
+    """Hide labels whose bounding boxes overlap, keeping lower-left labels first.
+
+    Returns the positions of hidden labels so their leader lines can be removed.
+    """
+    renderer = ax.figure.canvas.get_renderer()
+    hidden_positions: list[tuple[float, float]] = []
+    kept: list[tuple[Any, Any]] = []
+    for text in sorted(
+        ax.texts, key=lambda t: (t.get_position()[1], t.get_position()[0])
+    ):
+        if not text.get_visible():
+            continue
+        bbox = text.get_window_extent(renderer)
+        padded = bbox.padded(padding_pt)
+        if any(padded.overlaps(other[1]) for other in kept):
+            text.set_visible(False)
+            hidden_positions.append(text.get_position())
+        else:
+            kept.append((text, bbox))
+    return hidden_positions
+
+
+def _align_labels_to_feature_side(
+    ax: Any, features: Sequence[Any], feature_level_height: float
+) -> None:
+    """Make labels horizontal, move them to the strand side, and keep them off arrows."""
+    by_center = {round(f.x_center, 6): f for f in features}
+    for text in list(ax.texts):
+        if not text.get_visible():
+            continue
+        tx, ty = text.get_position()
+        matched = None
+        matched_line = None
+        text_idx = -1
+        for line in ax.lines:
+            xdata, ydata = line.get_data()
+            if len(xdata) != 2:
+                continue
+            if abs(xdata[0] - tx) < 0.5 and abs(ydata[0] - ty) < 0.5:
+                matched_line = line
+                text_idx = 0
+            elif abs(xdata[1] - tx) < 0.5 and abs(ydata[1] - ty) < 0.5:
+                matched_line = line
+                text_idx = 1
+            if matched_line is not None:
+                other_x = xdata[1] if text_idx == 0 else xdata[0]
+                matched = by_center.get(round(other_x, 6))
+                if matched is None:
+                    for center, feat in by_center.items():
+                        if abs(center - other_x) < 0.5:
+                            matched = feat
+                            break
+                break
+        if matched is None:
+            continue
+        sign = -1 if matched.strand == -1 else 1
+        level = matched.data.get("fixed_level", 0) or 0
+        min_label_y = sign * (abs(level) + 1.5) * feature_level_height
+        if sign * ty < sign * min_label_y:
+            ty = min_label_y
+        text.set_position((tx, ty))
+        if matched_line is not None:
+            xdata, ydata = matched_line.get_data()
+            new_xdata = list(xdata)
+            new_ydata = list(ydata)
+            new_xdata[text_idx] = tx
+            new_ydata[text_idx] = ty
+            matched_line.set_data(new_xdata, new_ydata)
+        text.set_rotation(0)
+        text.set_fontsize(_STATIC_LABEL_FONTSIZE)
+        text.set_bbox(None)
+        text.set_horizontalalignment("center")
+        if matched.strand == -1:
+            text.set_verticalalignment("top")
+        else:
+            text.set_verticalalignment("bottom")
+
+
+def _drop_dense_labels(ax: Any, min_gap_pt: float = 4.0) -> list[tuple[float, float]]:
+    """Hide labels that are horizontally too close to an already-kept label."""
+    renderer = ax.figure.canvas.get_renderer()
+    hidden_positions: list[tuple[float, float]] = []
+    kept: list[tuple[Any, Any]] = []
+    for text in sorted(ax.texts, key=lambda t: t.get_position()[0]):
+        if not text.get_visible():
+            continue
+        bbox = text.get_window_extent(renderer)
+        x0, _, x1, _ = bbox.extents
+        overlapping = False
+        for other_text, other_bbox in kept:
+            ox0, _, ox1, _ = other_bbox.extents
+            if x1 < ox0 or x0 > ox1:
+                continue
+            gap = min(abs(x1 - ox0), abs(ox1 - x0))
+            if gap < min_gap_pt:
+                overlapping = True
+                break
+        if overlapping:
+            text.set_visible(False)
+            hidden_positions.append(text.get_position())
+        else:
+            kept.append((text, bbox))
+    return hidden_positions
+
+
+def _drop_labels_overlapping_patches(
+    ax: Any, features: Sequence[Any]
+) -> list[tuple[float, float]]:
+    """Hide labels whose bounding boxes overlap visible feature patches."""
+    renderer = ax.figure.canvas.get_renderer()
+    hidden_positions: list[tuple[float, float]] = []
+    patch_bboxes = [
+        patch.get_window_extent(renderer)
+        for patch in ax.patches
+        if patch.get_visible()
+    ]
+    for text in ax.texts:
+        if not text.get_visible():
+            continue
+        tbbox = text.get_window_extent(renderer)
+        for pbbox in patch_bboxes:
+            if tbbox.overlaps(pbbox):
+                text.set_visible(False)
+                hidden_positions.append(text.get_position())
+                break
+    return hidden_positions
+
+
 def _write_static_plot(
     record: Any,
     plots_dir: Path,
@@ -1874,16 +2112,10 @@ def _write_static_plot(
 ) -> None:
     """Write a static matplotlib genome map for a contig with a category legend.
 
-    Labels are rotated upward to reduce overlap, and long contigs are split
+    Labels are kept horizontal, placed on the same side as their feature's
+    strand, and overlapping/dense labels are hidden. Long contigs are split
     into multiple horizontal rows. PNG output is rendered at 300 DPI.
     """
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-    from matplotlib.patches import Patch
-    from matplotlib.ticker import MaxNLocator
-
     is_dark = theme.lower() == "dark"
     style = "dark_background" if is_dark else "default"
 
@@ -1893,67 +2125,120 @@ def _write_static_plot(
         return {}
 
     class _TallTranslator(BiopythonTranslator):
-        graphic_record_parameters = {"feature_level_height": 1.0, "labels_spacing": 30}
+        graphic_record_parameters = {"feature_level_height": 0.4, "labels_spacing": 25}
+
+        def compute_feature_label(self, feature: Any) -> str | None:
+            category = _qualifier_to_str(feature.qualifiers.get("category"))
+            if category in {
+                _UNKNOWN_FUNCTION_CATEGORY,
+                _NO_PHROG_MATCH_CATEGORY,
+                "tRNA",
+            }:
+                return None
+            return super().compute_feature_label(feature)
 
     with plt.style.context(style):
         graphic_record = _TallTranslator(
             features_properties=_feature_properties
         ).translate_record(record)
+
         for feat in graphic_record.features:
-            if feat.label == "unknown function":
-                feat.label = None
+            feat.label = _truncate_label(feat.label)
 
+        # Compute global y range so every row has the same height and the
+        # bottom margin is large enough for tick labels below reverse features.
         min_level, max_level = _assign_static_feature_levels(graphic_record.features)
-
-        plot_kwargs = dict(
-            strand_in_label_threshold=7,
-            annotate_inline=False,
-            elevate_outline_annotations=False,
-            max_label_length=22,
-            max_line_length=18,
-        )
+        y_min = (min_level - 2.5) * graphic_record.feature_level_height
+        y_max = (max_level + 2.5) * graphic_record.feature_level_height
 
         seq_length = _contig_length(record)
-        axes: list[Any]
+        formatter = FuncFormatter(lambda x, pos: _format_genome_coord(x))
+
+        axes: list[Any] = []
+        line_features: list[list[Any]] = []
         if seq_length > _STATIC_MAX_BPS_PER_LINE:
             n_lines = (seq_length + _STATIC_MAX_BPS_PER_LINE - 1) // _STATIC_MAX_BPS_PER_LINE
-            fig, raw_axes = graphic_record.plot_on_multiple_lines(
-                n_lines=n_lines,
-                figure_width=_STATIC_FIGURE_WIDTH,
-                **plot_kwargs,
+            nucl_per_line = (seq_length + n_lines - 1) // n_lines
+            row_height = max(2.5, (max_level - min_level + 5.5) * graphic_record.feature_level_height)
+            fig, raw_axes = plt.subplots(
+                n_lines,
+                1,
+                figsize=(_STATIC_FIGURE_WIDTH, n_lines * row_height),
+                gridspec_kw={"hspace": 0.1},
             )
-            axes = list(raw_axes) if n_lines > 1 else [raw_axes]
-            fig.suptitle(record.id, fontsize=14)
+            if n_lines == 1:
+                axes = [raw_axes]
+            else:
+                axes = list(raw_axes)
+            for idx, ax in enumerate(axes):
+                start = graphic_record.first_index + idx * nucl_per_line
+                end = min(graphic_record.last_index, start + nucl_per_line)
+                line_record = graphic_record.crop((start, end))
+                line_features.append(line_record.features)
+                line_record.plot(
+                    ax=ax,
+                    x_lim=(start, end),
+                    with_ruler=True,
+                    draw_line=True,
+                    annotate_inline=False,
+                    elevate_outline_annotations=False,
+                    strand_in_label_threshold=None,
+                )
         else:
-            fig, ax1 = plt.subplots(1, 1, figsize=(_STATIC_FIGURE_WIDTH, 4))
-            ax, _ = graphic_record.plot(ax=ax1, **plot_kwargs)
-            ax.set_title(record.id)
+            fig, ax = plt.subplots(1, 1, figsize=(_STATIC_FIGURE_WIDTH, 4))
+            graphic_record.plot(
+                ax=ax,
+                with_ruler=True,
+                draw_line=True,
+                annotate_inline=False,
+                elevate_outline_annotations=False,
+                strand_in_label_threshold=None,
+            )
             axes = [ax]
+            line_features = [graphic_record.features]
 
-        level_range = max_level - min_level + 3
-        y_min = (min_level - 1) * graphic_record.feature_level_height
-        y_max = (max_level + 2) * graphic_record.feature_level_height
-        for ax in axes:
-            ax.set_ylim(y_min, y_max)
-            for text in ax.texts:
-                text.set_rotation(_STATIC_LABEL_ROTATION)
-                text.set_horizontalalignment("left")
-                text.set_verticalalignment("bottom")
-                text.set_rotation_mode("anchor")
-                text.set_fontsize(_STATIC_LABEL_FONTSIZE)
-                text.set_bbox(None)
-            # Reduce tick density and angle the x-axis labels so they fit.
-            ax.xaxis.set_major_locator(MaxNLocator(nbins=6))
+        axis_color = "white" if is_dark else "black"
+        for ax, feats in zip(axes, line_features):
+            ax.xaxis.set_major_formatter(formatter)
+            ax.xaxis.set_major_locator(MaxNLocator(nbins=6, integer=True))
+            # Place the x-axis ruler at y=0 (the strand separator) and draw
+            # tick marks/labels just below it, matching the reference layout.
+            ax.spines["bottom"].set_position(("data", 0))
+            ax.spines["bottom"].set_color(axis_color)
+            ax.spines["top"].set_visible(False)
+            ax.spines["left"].set_visible(False)
+            ax.spines["right"].set_visible(False)
+            ax.xaxis.set_ticks_position("bottom")
+            ax.tick_params(
+                axis="x",
+                direction="out",
+                length=5,
+                pad=4,
+                labelsize=_STATIC_LABEL_FONTSIZE,
+                colors=axis_color,
+                bottom=True,
+                top=False,
+                labelbottom=True,
+                labeltop=False,
+            )
             for tick_label in ax.get_xticklabels():
-                tick_label.set_rotation(30)
-                tick_label.set_horizontalalignment("right")
+                tick_label.set_rotation(0)
+                tick_label.set_horizontalalignment("center")
+                tick_label.set_verticalalignment("top")
 
-        # Ensure the figure is tall enough for the deepest lane stack.
-        desired_height = max(4, level_range * graphic_record.feature_level_height)
-        if seq_length > _STATIC_MAX_BPS_PER_LINE:
-            fig.set_size_inches(_STATIC_FIGURE_WIDTH, len(axes) * desired_height)
-        else:
-            fig.set_size_inches(_STATIC_FIGURE_WIDTH, desired_height)
+            _align_labels_to_feature_side(
+                ax, feats, graphic_record.feature_level_height
+            )
+            hidden_positions: list[tuple[float, float]] = []
+            hidden_positions.extend(_drop_overlapping_labels(ax))
+            hidden_positions.extend(_drop_dense_labels(ax))
+            hidden_positions.extend(_drop_labels_overlapping_patches(ax, feats))
+            _hide_label_leader_lines(ax, hidden_positions)
+
+            ax.set_ylim(y_min, y_max)
+            ax.set_yticks([])
+
+        fig.suptitle(record.id, fontsize=14)
 
         present_categories = {
             _qualifier_to_str(f.qualifiers.get("category"))
@@ -1968,14 +2253,16 @@ def _write_static_plot(
                 if category in present_categories
             ]
             if legend_handles:
-                axes[0].legend(
+                fig.legend(
                     handles=legend_handles,
-                    loc="upper left",
-                    bbox_to_anchor=(1.01, 1.0),
-                    title="Category",
+                    loc="lower center",
+                    bbox_to_anchor=(0.5, -0.02),
+                    ncol=min(4, len(legend_handles)),
                     frameon=True,
+                    fontsize="small",
+                    title="Category",
                 )
-                fig.subplots_adjust(right=0.82)
+                fig.subplots_adjust(bottom=0.12)
 
         out_path = plots_dir / f"{record.id}.{format}"
         savefig_kwargs = {"bbox_inches": "tight", "format": format, "pad_inches": 0.3}
@@ -2006,6 +2293,8 @@ def generate_plots_and_annotations(
     translation_table: int | None = None,
     theme: str = "light",
     trf_path: str | os.PathLike[str] | None = None,
+    extra_hits: dict[str, str | os.PathLike[str]] | None = None,
+    defensefinder_tsv: str | os.PathLike[str] | None = None,
 ) -> None:
     """Generate annotated GFF/GenBank and per-contig plots from HMM results.
 
@@ -2035,6 +2324,11 @@ def generate_plots_and_annotations(
     trf_path:
         Optional path to a Tandem Repeats Finder ``.dat`` file.  When provided,
         repeat regions are added to the GFF/GenBank records and plots.
+    extra_hits:
+        Optional mapping of extra database name (e.g. ``"card"``) to a CSV of
+        HMMER/phmmer hits produced by :func:`pca.pipeline.search_extra_db`.
+    defensefinder_tsv:
+        Optional path to a DefenseFinder ``defense_finder_genes.tsv`` file.
     """
     tmp_dir = Path(tmp_dir)
     plots_dir = tmp_dir / "plots"
@@ -2081,16 +2375,54 @@ def generate_plots_and_annotations(
     else:
         repeats = None
 
+    extra_hits = extra_hits or {}
+    extra_results: dict[str, pd.DataFrame] = {}
+    for db_name, csv_path in extra_hits.items():
+        csv_path = Path(csv_path)
+        if not csv_path.is_file() or csv_path.stat().st_size == 0:
+            extra_results[db_name] = pd.DataFrame()
+            continue
+        try:
+            df = pd.read_csv(csv_path)
+        except pd.errors.EmptyDataError:
+            extra_results[db_name] = pd.DataFrame()
+            continue
+        if not df.empty:
+            df = df.sort_values(
+                ["qname", "score", "eval"], ascending=[True, False, True]
+            ).drop_duplicates("qname")
+        extra_results[db_name] = df
+
+    defensefinder_results = pd.DataFrame()
+    if defensefinder_tsv:
+        df_path = Path(defensefinder_tsv)
+        if df_path.is_file() and df_path.stat().st_size > 0:
+            defensefinder_results = pd.DataFrame(
+                parse_defensefinder_genes(defensefinder_tsv)
+            )
+            if not defensefinder_results.empty:
+                defensefinder_results = defensefinder_results.sort_values(
+                    ["qname"]
+                ).drop_duplicates("qname")
+
     phrogs_anno = pd.read_csv(meta_dir, low_memory=False)
     phrogs_anno = phrogs_anno.rename(
         columns={"#phrog": "phrog", "Annotation": "annot", "Category": "category"}
     )
     phrogs_anno = phrogs_anno.fillna("unknown function")
-    category_colors = dict(zip(phrogs_anno["category"], phrogs_anno["color"]))
+    category_colors = {
+        **_DEFAULT_CATEGORY_COLORS,
+        **{
+            cat: color
+            for cat, color in zip(phrogs_anno["category"], phrogs_anno["color"])
+            if pd.notna(color)
+        },
+    }
     if trna is not None:
         category_colors["tRNA"] = "#e377c2"
     if repeats is not None:
         category_colors["tandem repeat"] = _DEFAULT_CATEGORY_COLORS["tandem repeat"]
+    category_colors["other"] = _DEFAULT_CATEGORY_COLORS["other"]
 
     results_with_annotate = search_results.merge(
         phrogs_anno, how="inner", left_on="tname", right_on="phrog"
@@ -2116,20 +2448,69 @@ def generate_plots_and_annotations(
             tmp = results_filtered[results_filtered["contig"] == record.id]
 
             for pos, feature in enumerate(record.features, start=1):
+                qname = f"{record.id}_{pos}"
                 available_meta_cols = [
                     col for col in _METADATA_QUALIFIER_MAP if col in tmp.columns
                 ]
                 tmp_feature = tmp[tmp["position"] == pos][available_meta_cols]
-                if not tmp_feature.empty:
+                has_phrog = not tmp_feature.empty
+                if has_phrog:
                     for col in available_meta_cols:
                         qualifier_key = _METADATA_QUALIFIER_MAP[col]
                         feature.qualifiers.update(
                             {qualifier_key: tmp_feature[col].values[0]}
                         )
                 else:
-                    feature.qualifiers.update({"label": "unknown function"})
-                    feature.qualifiers.update({"category": "unknown"})
-                    feature.qualifiers.update({"color": "#c9c9c9"})
+                    feature.qualifiers.update({"label": _NO_PHROG_MATCH_CATEGORY})
+                    feature.qualifiers.update({"category": _NO_PHROG_MATCH_CATEGORY})
+                    feature.qualifiers.update(
+                        {"color": _DEFAULT_CATEGORY_COLORS[_NO_PHROG_MATCH_CATEGORY]}
+                    )
+
+                for db_name, db_df in extra_results.items():
+                    if db_df.empty or "qname" not in db_df.columns:
+                        continue
+                    db_hit = db_df[db_df["qname"] == qname]
+                    if not db_hit.empty:
+                        hit = db_hit.iloc[0]
+                        feature.qualifiers[f"{db_name}_hit"] = str(hit["tname"])
+                        feature.qualifiers[f"{db_name}_evalue"] = f"{float(hit['eval']):.2g}"
+                        feature.qualifiers[f"{db_name}_score"] = f"{float(hit['score']):.1f}"
+                        if not has_phrog:
+                            category = _EXTRA_DB_CATEGORIES.get(
+                                db_name, _UNKNOWN_FUNCTION_CATEGORY
+                            )
+                            feature.qualifiers["category"] = category
+                            feature.qualifiers["color"] = _DEFAULT_CATEGORY_COLORS.get(
+                                category, "#c9c9c9"
+                            )
+                            feature.qualifiers["label"] = str(hit["tname"])
+
+                if not defensefinder_results.empty:
+                    df_hit = defensefinder_results[defensefinder_results["qname"] == qname]
+                    if not df_hit.empty:
+                        hit = df_hit.iloc[0]
+                        feature.qualifiers["defensefinder_hit"] = str(hit["gene_name"])
+                        feature.qualifiers["defensefinder_system"] = str(hit["system"])
+                        feature.qualifiers["defensefinder_type"] = str(hit["type"])
+                        if not has_phrog and not any(
+                            feature.qualifiers.get(f"{db_name}_hit")
+                            for db_name in _EXTRA_DB_CATEGORIES
+                        ):
+                            category = _EXTRA_DB_CATEGORIES["defensefinder"]
+                            feature.qualifiers["category"] = category
+                            feature.qualifiers["color"] = _DEFAULT_CATEGORY_COLORS.get(
+                                category, "#c9c9c9"
+                            )
+                            feature.qualifiers["label"] = str(hit["gene_name"])
+
+                # Ensure the plotted/written color matches the chosen category
+                # palette (overrides any stale color from the metadata CSV).
+                category = _qualifier_to_str(feature.qualifiers.get("category"))
+                if category:
+                    feature.qualifiers["color"] = category_colors.get(
+                        category, _DEFAULT_CATEGORY_COLORS.get(category, "#c9c9c9")
+                    )
 
             if trna is not None:
                 tmp_trna = trna[trna["contig"] == record.id]

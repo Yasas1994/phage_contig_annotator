@@ -3,9 +3,12 @@
 import argparse
 import gzip
 import logging
+import os
 from pathlib import Path
 
 import pytest
+from Bio import SeqIO
+from Bio.Seq import Seq
 
 from pca import (
     annotations,
@@ -24,14 +27,19 @@ class TestModuleFacades:
         assert utils.Compression is io.Compression
         assert utils.read_fasta is io.read_fasta
         assert utils.is_compressed is io.is_compressed
+        assert utils.convert_to_fasta is io.convert_to_fasta
+        assert utils.detect_sequence_format is io.detect_sequence_format
 
     def test_validation_symbols_re_exported(self) -> None:
         assert utils.is_valid_dir is validation.is_valid_dir
         assert utils.check_executables is validation.check_executables
 
     def test_pipeline_symbols_re_exported(self) -> None:
+        assert utils.call_genes_phanotate is pipeline.call_genes_phanotate
         assert utils.call_genes_pyrodigal is pipeline.call_genes_pyrodigal
+        assert utils.search_extra_db is pipeline.search_extra_db
         assert utils.search_hmms_pyhmmer is pipeline.search_hmms_pyhmmer
+        assert utils.search_phmmer_pyhmmer is pipeline.search_phmmer_pyhmmer
 
     def test_annotations_symbols_re_exported(self) -> None:
         assert utils.get_coordinates is annotations.get_coordinates
@@ -43,6 +51,7 @@ class TestModuleFacades:
     def test_parsers_symbols_re_exported(self) -> None:
         assert utils.parse_hmmsearch is parsers.parse_hmmsearch
         assert utils.parse_trna_gff is parsers.parse_trna_gff
+        assert utils.parse_defensefinder_genes is parsers.parse_defensefinder_genes
 
     def test_logger_symbol_re_exported(self) -> None:
         assert utils.get_logger is logutils.get_logger
@@ -103,6 +112,68 @@ class TestReadFasta:
         header, seq = records[0]
         assert header.startswith("NODE_94_length_44776_cov_27.159388")
         assert set(seq).issubset({"A", "C", "G", "T", "N"})
+
+
+class TestInputFormatConversion:
+    def test_detect_sequence_format_fasta(self, tmp_path: Path) -> None:
+        fasta = tmp_path / "seq.fa"
+        fasta.write_text(">contig1\nACGT\n")
+        assert utils.detect_sequence_format(fasta) == "fasta"
+
+    def test_detect_sequence_format_genbank(self, tmp_path: Path) -> None:
+        gbk = tmp_path / "seq.gb"
+        record = SeqIO.SeqRecord(
+            Seq("ACGT"),
+            id="seq1",
+            description="test sequence",
+            annotations={"molecule_type": "DNA"},
+        )
+        SeqIO.write(record, gbk, "genbank")
+        assert utils.detect_sequence_format(gbk) == "genbank"
+
+    def test_detect_sequence_format_embl(self, tmp_path: Path) -> None:
+        embl = tmp_path / "seq.embl"
+        embl.write_text(
+            "ID   seq1; 4 BP.\n"
+            "SQ\n"
+            "     acgt\n"
+            "//\n"
+        )
+        assert utils.detect_sequence_format(embl) == "embl"
+
+    def test_detect_sequence_format_unknown(self, tmp_path: Path) -> None:
+        bad = tmp_path / "seq.txt"
+        bad.write_text("not a sequence file\n")
+        assert utils.detect_sequence_format(bad) == "unknown"
+
+    def test_convert_to_fasta_from_genbank(self, tmp_path: Path) -> None:
+        gbk = tmp_path / "seq.gb"
+        record = SeqIO.SeqRecord(
+            Seq("ACGT"),
+            id="seq1",
+            description="test sequence",
+            annotations={"molecule_type": "DNA"},
+        )
+        SeqIO.write(record, gbk, "genbank")
+        out = tmp_path / "out.fa"
+        utils.convert_to_fasta(gbk, out)
+        text = out.read_text()
+        assert text.startswith(">seq1")
+        assert "ACGT" in text
+
+    def test_convert_to_fasta_from_fasta_copies_file(self, tmp_path: Path) -> None:
+        fasta = tmp_path / "seq.fa"
+        fasta.write_text(">contig1\nACGT\n")
+        out = tmp_path / "out.fa"
+        utils.convert_to_fasta(fasta, out)
+        assert out.read_text() == fasta.read_text()
+
+    def test_convert_to_fasta_unknown_raises(self, tmp_path: Path) -> None:
+        bad = tmp_path / "seq.txt"
+        bad.write_text("not a sequence file\n")
+        out = tmp_path / "out.fa"
+        with pytest.raises(ValueError, match="Unable to determine sequence format"):
+            utils.convert_to_fasta(bad, out)
 
 
 class TestValidationHelpers:
@@ -235,6 +306,75 @@ class TestPyrodigal:
         assert ">contig1_1" in faa_text
 
 
+class TestPhanotate:
+    @staticmethod
+    def _make_fake_phanotate(bin_dir: Path) -> None:
+        script = bin_dir / "phanotate.py"
+        nl = chr(10)
+        tab = chr(9)
+        lines = [
+            "#!/usr/bin/env python",
+            "import sys",
+            "out = 'phanotate.gff'",
+            "i = 1",
+            "while i < len(sys.argv):",
+            "    if sys.argv[i] == '-o' and i + 1 < len(sys.argv):",
+            "        out = sys.argv[i + 1]",
+            "        i += 2",
+            "    elif sys.argv[i] == '-f':",
+            "        i += 2",
+            "    else:",
+            "        i += 1",
+            "with open(out, 'w') as fh:",
+            "    fh.write('##gff-version 3' + chr(10))",
+            "    fh.write('##sequence-region contig1 1 63' + chr(10))",
+            "    fh.write('contig1' + chr(9) + 'PHANOTATE' + chr(9) + 'CDS' + chr(9) + '1' + chr(9) + '30' + chr(9) + '.' + chr(9) + '+' + chr(9) + '0' + chr(9) + 'ID=1' + chr(10))",
+        ]
+        script.write_text(nl.join(lines))
+        script.chmod(0o755)
+
+    def test_call_genes_phanotate(self, tmp_path: Path, monkeypatch) -> None:
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        self._make_fake_phanotate(bin_dir)
+        monkeypatch.setenv(
+            "PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        )
+
+        fna = tmp_path / "input.fna"
+        fna.write_text(">contig1" + chr(10) + "ATG" * 20 + "TAA" + chr(10))
+        out_faa = tmp_path / "proteins.faa"
+        out_gff = tmp_path / "proteins.gff"
+
+        pipeline.call_genes_phanotate(fna, out_faa, out_gff)
+
+        assert out_faa.is_file()
+        assert out_gff.is_file()
+        faa_text = out_faa.read_text()
+        assert ">contig1_1" in faa_text
+        assert "M" * 10 in faa_text
+        gff_text = out_gff.read_text()
+        assert "ID=contig1_1" in gff_text
+
+    def test_call_genes_phanotate_translation_table(self, tmp_path: Path, monkeypatch) -> None:
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        self._make_fake_phanotate(bin_dir)
+        monkeypatch.setenv(
+            "PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        )
+
+        fna = tmp_path / "input.fna"
+        fna.write_text(">contig1" + chr(10) + "ATG" * 20 + "TAA" + chr(10))
+        out_faa = tmp_path / "proteins.faa"
+        out_gff = tmp_path / "proteins.gff"
+
+        pipeline.call_genes_phanotate(fna, out_faa, out_gff, translation_table=11)
+
+        assert out_faa.is_file()
+        assert out_gff.is_file()
+
+
 class TestPyhmmer:
     def test_search_hmms_pyhmmer(self, tmp_path: Path) -> None:
         from pyhmmer.easel import Alphabet, TextSequence
@@ -304,7 +444,7 @@ class TestAnnotations:
         )
 
         meta = tmp_path / "meta.csv"
-        meta.write_text("#phrog,Annotation,Category,color\nphrog_1,test,unknown,#c9c9c9\n")
+        meta.write_text("#phrog,Annotation,Category,color\nphrog_1,test,unknown function,#c9c9c9\n")
 
         trna_gff = tmp_path / "trna.gff"
         trna_gff.write_text("##gff-version 3\n")
@@ -349,7 +489,7 @@ class TestAnnotations:
         )
 
         meta = tmp_path / "meta.csv"
-        meta.write_text("#phrog,Annotation,Category,color\nphrog_1,test,unknown,#c9c9c9\n")
+        meta.write_text("#phrog,Annotation,Category,color\nphrog_1,test,unknown function,#c9c9c9\n")
 
         trna_gff = tmp_path / "trna.gff"
         trna_gff.write_text("##gff-version 3\n")

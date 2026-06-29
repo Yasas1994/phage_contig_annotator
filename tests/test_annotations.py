@@ -60,7 +60,7 @@ def test_write_static_plot_creates_pdf_and_png(tmp_path: Path) -> None:
             },
         )
     )
-    category_colors = {"other": "#9467bd", "unknown": "#c9c9c9"}
+    category_colors = {"other": "#9467bd", "no phrogs match": "#a0a0a0"}
     _write_static_plot(record, plots_dir, "pdf", category_colors)
     _write_static_plot(record, plots_dir, "png", category_colors)
     pdf_path = plots_dir / "test_contig.pdf"
