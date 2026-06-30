@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 __all__ = [
     "parse_blastp",
+    "parse_crispr_cas_finder_gff",
     "parse_defensefinder_genes",
     "parse_hmmsearch",
     "parse_trf_dat",
@@ -168,6 +169,35 @@ def parse_trna(path: str | Path) -> Iterator[dict[str, Any]]:
                 yield {names[i]: formats[i](values[i]) for i in range(9)}
             except (ValueError, IndexError) as exc:
                 logger.debug("skipping erroneous tRNA line: %s (%s)", line.rstrip(), exc)
+
+
+def parse_crispr_cas_finder_gff(path: str | Path) -> Iterator[dict[str, Any]]:
+    """Parse CRISPRCasFinder GFF output.
+
+    Yields one record per CRISPR array feature (type ``CRISPR``), with keys
+    ``qname``, ``begin``, ``end``, ``score``, ``strand`` and ``attributes``.
+    """
+    with open(path) as f:
+        for line in f:
+            if line.startswith("#") or not line.strip():
+                continue
+            values = line.split("\t")
+            if len(values) < 9:
+                continue
+            try:
+                feature_type = values[2]
+                if feature_type != "CRISPR":
+                    continue
+                yield {
+                    "qname": values[0],
+                    "begin": int(values[3]),
+                    "end": int(values[4]),
+                    "score": float(values[5]) if values[5] not in (".", "") else 0.0,
+                    "strand": values[6],
+                    "attributes": values[8].rstrip(),
+                }
+            except (ValueError, IndexError) as exc:
+                logger.debug("skipping erroneous CRISPRCasFinder GFF line: %s (%s)", line.rstrip(), exc)
 
 
 def parse_trna_gff(path: str | Path) -> Iterator[dict[str, Any]]:

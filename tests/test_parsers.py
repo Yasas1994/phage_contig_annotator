@@ -2,7 +2,40 @@
 
 from pathlib import Path
 
-from pca.parsers import parse_trf_dat
+from pca.parsers import parse_crispr_cas_finder_gff, parse_trf_dat
+
+
+def test_parse_crispr_cas_finder_gff_extracts_crispr_features(tmp_path: Path) -> None:
+    gff = tmp_path / "crispr.gff"
+    gff.write_text(
+        "##gff-version 3\n"
+        "contig1\tCRISPRCasFinder\tCRISPR\t10\t30\t.\t+\t.\tID=CRISPR1;Name=CRISPR1\n"
+        "contig1\tCRISPRCasFinder\tCas\t50\t70\t.\t+\t.\tName=cas9\n"
+        "contig2\tCRISPRCasFinder\tCRISPR\t5\t25\t23.5\t-\t.\tID=CRISPR2\n"
+    )
+    records = list(parse_crispr_cas_finder_gff(gff))
+    assert len(records) == 2
+    assert records[0]["qname"] == "contig1"
+    assert records[0]["begin"] == 10
+    assert records[0]["end"] == 30
+    assert records[0]["strand"] == "+"
+    assert records[0]["score"] == 0.0
+    assert records[1]["qname"] == "contig2"
+    assert records[1]["score"] == 23.5
+    assert records[1]["strand"] == "-"
+
+
+def test_parse_crispr_cas_finder_gff_skips_header_and_blank_lines(
+    tmp_path: Path,
+) -> None:
+    gff = tmp_path / "crispr.gff"
+    gff.write_text(
+        "# CRISPRCasFinder output\n"
+        "\n"
+        "contig1\tCRISPRCasFinder\tCRISPR\t10\t30\t.\t+\t.\tID=CRISPR1\n"
+    )
+    records = list(parse_crispr_cas_finder_gff(gff))
+    assert len(records) == 1
 
 
 def test_parse_trf_dat_extracts_repeats_per_sequence(tmp_path: Path) -> None:

@@ -15,7 +15,7 @@ import click
 import requests
 import tqdm
 
-from pca import annotations, validation
+from pca import annotations, genome_stats, validation
 from pca.io import convert_to_fasta
 from pca.logutils import get_logger
 
@@ -336,6 +336,11 @@ def main(ctx: click.Context, quiet: bool) -> None:
     help="Run DefenseFinder to detect anti-phage defense systems.",
 )
 @click.option(
+    "--run-crisprcasfinder",
+    is_flag=True,
+    help="Run CRISPRCasFinder to detect CRISPR arrays and Cas genes.",
+)
+@click.option(
     "--cpus",
     default=8,
     show_default=True,
@@ -390,6 +395,7 @@ def run(
     extra_dbs: tuple[str, ...],
     extra_evalue: float,
     run_defensefinder: bool,
+    run_crisprcasfinder: bool,
     cpus: int,
     plot_formats: tuple[str, ...],
     translation_table: int | None,
@@ -422,6 +428,12 @@ def run(
     run_trf = (not skip_trf) and input_type == "contigs"
     if run_trf:
         validation.check_executables(["trf"])
+
+    if run_crisprcasfinder:
+        if not shutil.which("CRISPRCasFinder.pl") and not shutil.which("CRISPRCasFinder"):
+            raise click.UsageError(
+                "CRISPRCasFinder was requested but CRISPRCasFinder.pl is not on PATH."
+            )
 
     gene_caller = gene_caller.lower()
     if input_type == "contigs" and gene_caller == "phanotate":
@@ -479,6 +491,7 @@ def run(
         "extra_dbs": extra_dbs_list,
         "extra_evalue": extra_evalue,
         "run_defensefinder": run_defensefinder,
+        "run_crisprcasfinder": run_crisprcasfinder,
     }
 
     config_path = output_dir / "config.yaml"
@@ -614,6 +627,85 @@ def utils_report(
     for out_path in out_paths:
         click.echo(f"Wrote {out_path}")
     logger.info("generated %d HTML report(s)", len(out_paths))
+
+
+@utils.command("stats")
+@click.option(
+    "-i",
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
+    help="Path to input nucleotide FASTA file.",
+)
+@click.option(
+    "-g",
+    "--gff",
+    "gff_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
+    help="Path to GFF file with gene/CDS features.",
+)
+@click.option(
+    "-t",
+    "--trf",
+    "trf_path",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
+    help="Optional pre-computed TRF .dat file.",
+)
+@click.option(
+    "--run-trf",
+    is_flag=True,
+    help="Run TRF with flags '-f -d -m' if no --trf file is provided.",
+)
+@click.option(
+    "-o",
+    "--output",
+    "output_path",
+    default=None,
+    type=click.Path(file_okay=True, dir_okay=False, writable=True, path_type=Path),
+    help="Output TSV path (default: stdout).",
+)
+@click.pass_context
+def utils_stats(
+    ctx: click.Context,
+    input_path: Path,
+    gff_path: Path,
+    trf_path: Path | None,
+    run_trf: bool,
+    output_path: Path | None,
+) -> None:
+    """Compute per-contig genomic statistics (strand switching, TRF repeats)."""
+    logger = get_logger(quiet=ctx.obj["quiet"])
+
+    trf_dat = trf_path
+    if trf_dat is None and run_trf:
+        from pca.externals import run_trf
+
+        tmp_dir = Path(output_path).parent if output_path else Path.cwd()
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        trf_prefix = tmp_dir / f"{input_path.stem}_trf"
+        if not run_trf(str(trf_prefix), str(input_path), flags=["-f", "-d", "-m"]):
+            raise click.ClickException("TRF failed; cannot compute tandem-repeat stats.")
+        trf_dat = Path(f"{trf_prefix}.dat")
+
+    try:
+        df = genome_stats.compute_genome_stats(
+            input_path,
+            gff_path,
+            trf_path=trf_dat,
+        )
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if output_path is None:
+        click.echo(df.to_csv(sep="\t", index=False))
+    else:
+        df.to_csv(output_path, sep="\t", index=False)
+        click.echo(f"Wrote {output_path}")
+    logger.info("computed stats for %d contig(s)", len(df))
+
 
 
 def _write_yaml_config(path: Path, config: dict[str, object]) -> None:

@@ -8,6 +8,7 @@ dependencies.
 
 from __future__ import annotations
 
+import logging
 import os
 import shlex
 import shutil
@@ -16,7 +17,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-__all__ = ["run_defensefinder", "run_phanotate", "run_trf", "run_trnascan"]
+logger = logging.getLogger(__name__)
+
+__all__ = ["run_crispr_cas_finder", "run_defensefinder", "run_phanotate", "run_trf", "run_trnascan"]
 
 
 def _phanotate_executable() -> str:
@@ -25,6 +28,14 @@ def _phanotate_executable() -> str:
         if shutil.which(cmd):
             return cmd
     return "phanotate.py"
+
+
+def _crispr_cas_finder_executable() -> str | None:
+    """Return the CRISPRCasFinder executable on PATH, or None if missing."""
+    for cmd in ("CRISPRCasFinder.pl", "CRISPRCasFinder", "crisprcasfinder"):
+        if shutil.which(cmd):
+            return cmd
+    return None
 
 
 def _run_tool(
@@ -60,6 +71,44 @@ def _run_tool(
         return False
 
 
+def run_crispr_cas_finder(out: str, in_: str, threads: int = 1) -> bool:
+    """Run CRISPRCasFinder on a nucleotide FASTA file.
+
+    CRISPRCasFinder detects CRISPR arrays and Cas genes. It writes a results
+    directory under ``out`` containing a GFF, a summary CSV and additional
+    auxiliary files. This wrapper runs the tool with ``-so`` 1 (output
+    orientation) and ``-plotNoTOC`` to suppress the HTML table of contents, and
+    copies the resulting GFF to ``{out}.gff`` for easier downstream access.
+    """
+    executable = _crispr_cas_finder_executable()
+    if executable is None:
+        logger.error("CRISPRCasFinder not found on PATH; skipping CRISPR-Cas detection")
+        return False
+
+    out_path = Path(out)
+    out_path.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        executable,
+        "-i", in_,
+        "-out", str(out_path),
+        "-so", "1",
+        "-plotNoTOC",
+    ]
+    if threads > 1:
+        cmd.extend(["-cpu", str(threads)])
+
+    success = _run_tool(cmd, f"{out}.log", f"{out}.cmd")
+    if not success:
+        return False
+
+    # Copy the GFF next to the output directory for stable downstream access.
+    gff_candidates = list(out_path.glob("*.gff")) + list(out_path.glob("*CRISPR*gff"))
+    target_gff = out_path / "crisprcasfinder.gff"
+    if gff_candidates and not target_gff.exists():
+        shutil.copy2(gff_candidates[0], target_gff)
+    return True
+
+
 def run_defensefinder(out: str, in_: str, threads: int = 1) -> bool:
     """Run DefenseFinder on a protein FASTA file.
 
@@ -79,7 +128,7 @@ def run_defensefinder(out: str, in_: str, threads: int = 1) -> bool:
     return _run_tool(cmd, f"{out}.log", f"{out}.cmd")
 
 
-def _run_trf_single(out: str, in_: str) -> Path:
+def _run_trf_single(out: str, in_: str, flags: list[str] | None = None) -> Path:
     """Run TRF on a single FASTA file and return the path to the ``.dat`` output."""
     in_path = Path(in_).resolve()
     out_path = Path(f"{out}.dat")
@@ -87,7 +136,8 @@ def _run_trf_single(out: str, in_: str) -> Path:
 
     params = ["2", "7", "7", "80", "10", "50", "2000"]
     dot_params = ".".join(params)
-    cmd = ["trf", "{input}", *params, "-d", "-h"]
+    trf_flags = ["-d", "-h"] if flags is None else flags
+    cmd = ["trf", "{input}", *params, *trf_flags]
 
     with tempfile.TemporaryDirectory(dir=str(out_path.parent)) as run_dir:
         local_fasta = Path(run_dir) / in_path.name
@@ -105,7 +155,7 @@ def _run_trf_single(out: str, in_: str) -> Path:
     return out_path
 
 
-def run_trf(out: str, in_: str, threads: int = 1) -> bool:
+def run_trf(out: str, in_: str, threads: int = 1, flags: list[str] | None = None) -> bool:
     """Run Tandem Repeats Finder (TRF) on a nucleotide FASTA file.
 
     ``out`` is treated as a prefix; the final TRF table is written to
@@ -119,6 +169,10 @@ def run_trf(out: str, in_: str, threads: int = 1) -> bool:
     sequences, the input is split into at most ``threads`` chunks and TRF is
     run on each chunk in parallel. The resulting ``.dat`` files are concatenated
     to produce the final output.
+
+    ``flags`` controls the TRF output format. The default is ``["-d", "-h"]``
+    (data file, no HTML). Pass ``["-f", "-d", "-m"]`` to produce flanking
+    sequence and masked sequence output in addition to the ``.dat`` table.
     """
     from pca.io import read_fasta, split_fasta
     from pca.parallel import async_parallel
@@ -137,7 +191,7 @@ def run_trf(out: str, in_: str, threads: int = 1) -> bool:
 
     chunk_outs = [str(chunk_dir / f"chunk_{i}") for i in range(len(chunk_paths))]
     args = [
-        [chunk_out, str(chunk_path)]
+        [chunk_out, str(chunk_path), flags]
         for chunk_out, chunk_path in zip(chunk_outs, chunk_paths)
     ]
     async_parallel(_run_trf_single, args, threads=n_chunks)

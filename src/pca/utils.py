@@ -6,7 +6,7 @@ New code should import from the focused submodules (``io``, ``validation``,
 """
 
 from __future__ import annotations
-
+from pca import annotations, genome_stats, validation
 from pca.annotations import (
     convert_to_html,
     create_feature,
@@ -15,7 +15,7 @@ from pca.annotations import (
     get_coordinates,
     get_cordinates,
 )
-from pca.externals import run_trnascan
+from pca.externals import run_crispr_cas_finder, run_trnascan
 from pca.io import (
     Compression,
     check_fasta,
@@ -30,6 +30,7 @@ from pca.logutils import get_logger
 from pca.parallel import async_parallel
 from pca.parsers import (
     parse_blastp,
+    parse_crispr_cas_finder_gff,
     parse_defensefinder_genes,
     parse_hmmsearch,
     parse_trna,
@@ -69,9 +70,11 @@ __all__ = [
     # parallel
     "async_parallel",
     # externals
+    "run_crispr_cas_finder",
     "run_trnascan",
     # parsers
     "parse_blastp",
+    "parse_crispr_cas_finder_gff",
     "parse_defensefinder_genes",
     "parse_hmmsearch",
     "parse_trna",
@@ -83,6 +86,15 @@ __all__ = [
     "generate_plots_and_gff",
     "get_coordinates",
     "get_cordinates",
+    # genome_stats
+    "strand_switch_frequency",
+    "strand_run_stats",
+    "weighted_strand_switch_frequency",
+    "strand_bias_index",
+    "tandem_repeat_stats",
+    "crispr_stats",
+    "contig_stats_from_gff",
+    "compute_genome_stats",
     # pipeline
     "call_genes_phanotate",
     "call_genes_pyrodigal",

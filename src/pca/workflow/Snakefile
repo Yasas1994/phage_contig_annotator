@@ -35,6 +35,9 @@ extra_dir = output_dir / "extra"
 defensefinder_dir = output_dir / "defensefinder"
 defensefinder_genes_tsv = defensefinder_dir / "defense_finder_genes.tsv"
 
+crisprcasfinder_dir = output_dir / "crisprcasfinder"
+crisprcasfinder_gff = crisprcasfinder_dir / "crisprcasfinder.gff"
+
 
 proteins_faa = output_dir / "genes" / "proteins.faa"
 proteins_gff = output_dir / "genes" / "proteins.gff"
@@ -57,6 +60,12 @@ annotations_per_contig_dir = output_dir / "annotations" / "per_contig"
 plots_dir = output_dir / "plots"
 plot_done_files = [plots_dir / f".{fmt}_done" for fmt in plot_formats]
 
+stats_dir = output_dir / "stats"
+stats_tsv = stats_dir / "stats.tsv"
+
+
+run_crisprcasfinder = config.get("run_crisprcasfinder", False)
+
 
 def _extra_db_path(db):
     """Resolve the path for an optional extra database."""
@@ -65,7 +74,7 @@ def _extra_db_path(db):
 
 
 rule all:
-    """Final outputs: per-contig files plus the combined annotation files."""
+    """Final outputs: per-contig files, combined annotation files, and stats."""
     input:
         gff=annotations_gff,
         gbk=annotations_gbk,
@@ -75,6 +84,8 @@ rule all:
         trf_per_contig=trf_per_contig_dir,
         annotations_per_contig=annotations_per_contig_dir,
         plots=plot_done_files,
+        stats=stats_tsv if input_type == "contigs" else [],
+        crisprcasfinder=crisprcasfinder_dir if run_crisprcasfinder else [],
 
 
 if input_type == "contigs":
@@ -152,6 +163,7 @@ if run_trf:
                 out=str(output_dir / "trf" / "trf"),
                 in_=str(input.fna),
                 threads=threads,
+                flags=["-f", "-d", "-m"],
             )
 
 else:
@@ -346,3 +358,45 @@ rule annotate:
             extra_hits=extra_hits or None,
             defensefinder_tsv=defensefinder_input,
         )
+
+
+rule genome_stats:
+    """Compute per-contig genomic statistics (strand switching, TRF repeats)."""
+    input:
+        fna=input_path,
+        gff=proteins_gff,
+        trf=trf_dat,
+        crispr=crisprcasfinder_gff if run_crisprcasfinder else [],
+    output:
+        tsv=stats_tsv,
+    run:
+        from pca.genome_stats import compute_genome_stats
+
+        df = compute_genome_stats(
+            input.fna,
+            input.gff,
+            trf_path=input.trf if run_trf else None,
+            crispr_path=input.crispr if run_crisprcasfinder else None,
+        )
+        stats_dir.mkdir(parents=True, exist_ok=True)
+        df.to_csv(output.tsv, sep="\t", index=False)
+
+
+if run_crisprcasfinder:
+
+    rule crispr_cas_finder:
+        """Detect CRISPR arrays and Cas genes with CRISPRCasFinder."""
+        input:
+            fna=input_path,
+        output:
+            outdir=directory(crisprcasfinder_dir),
+            gff=crisprcasfinder_gff,
+        threads: workflow.cores
+        run:
+            from pca.externals import run_crispr_cas_finder
+
+            run_crispr_cas_finder(
+                out=str(crisprcasfinder_dir),
+                in_=str(input.fna),
+                threads=threads,
+            )
