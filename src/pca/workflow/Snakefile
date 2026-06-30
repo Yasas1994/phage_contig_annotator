@@ -31,6 +31,10 @@ extra_dbs = config.get("extra_dbs", [])
 extra_evalue = config.get("extra_evalue", 1e-5)
 run_defensefinder = config.get("run_defensefinder", False)
 
+# DefenseFinder is a separate tool, not an HMM/FASTA database, so exclude it
+# from the list of databases used by the extra_hmmsearch rule.
+hmm_extra_dbs = [db for db in extra_dbs if db != "defensefinder"]
+
 extra_dir = output_dir / "extra"
 defensefinder_dir = output_dir / "defensefinder"
 defensefinder_genes_tsv = defensefinder_dir / "defense_finder_genes.tsv"
@@ -325,7 +329,7 @@ rule annotate:
         trf_dat=trf_dat,
         proteins_gff=proteins_gff if input_type == "contigs" else [],
         meta=meta_path,
-        extra_csvs=expand(str(extra_dir / "{db}.csv"), db=extra_dbs) if extra_dbs else [],
+        extra_csvs=expand(str(extra_dir / "{db}.csv"), db=hmm_extra_dbs) if hmm_extra_dbs else [],
         defensefinder_tsv=str(defensefinder_genes_tsv) if run_defensefinder else [],
     output:
         gff=annotations_gff,
@@ -338,7 +342,7 @@ rule annotate:
         gff_input = input.proteins_gff if input_type == "contigs" else str(proteins_gff)
         extra_hits = {
             db: str(extra_dir / f"{db}.csv")
-            for db in extra_dbs
+            for db in hmm_extra_dbs
         }
         defensefinder_input = None
         if run_defensefinder and input.defensefinder_tsv:
