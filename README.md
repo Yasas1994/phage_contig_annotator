@@ -53,6 +53,50 @@ bash install.sh
    phage_contig_annotator download-db
    ```
 
+## Optional tools
+
+The pipeline can run two optional external tools. They are installed by
+`install.sh` / `environment.yml` where a conda package exists, but each tool
+needs extra model databases and (for CRISPRCasFinder) a manual install step.
+
+### DefenseFinder (anti-phage defense systems)
+
+The `defense-finder` conda package is included in `environment.yml`.
+`install.sh` downloads the latest DefenseFinder models with `defense-finder update`.
+
+Enable it with:
+
+```bash
+phage_contig_annotator run --input test/bin.460.fna --output output_dir \
+  --run-defensefinder --cpus 10
+```
+
+### CRISPRCasFinder (CRISPR arrays and Cas genes)
+
+`environment.yml` installs `macsyfinder` (required by CRISPRCasFinder) and
+`install.sh` downloads the CasFinder models with:
+
+```bash
+macsydata install -u CASFinder==3.1.0
+```
+
+CRISPRCasFinder itself is a Perl script that is not available on conda. Install
+it manually, for example:
+
+```bash
+CRISPR_DIR="$CONDA_PREFIX/share/crisprcasfinder"
+mkdir -p "$CRISPR_DIR"
+git clone --depth 1 https://github.com/dcouvin/CRISPRCasFinder.git "$CRISPR_DIR"
+ln -s "$CRISPR_DIR/CRISPRCasFinder.pl" "$CONDA_PREFIX/bin/CRISPRCasFinder.pl"
+```
+
+Enable it with:
+
+```bash
+phage_contig_annotator run --input test/bin.460.fna --output output_dir \
+  --run-crisprcasfinder --cpus 10
+```
+
 ## Usage
 
 Activate the environment and run the full pipeline:

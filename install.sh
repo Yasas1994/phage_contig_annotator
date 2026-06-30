@@ -41,6 +41,10 @@ echo "==> Installing phage_contig_annotator in editable mode ..."
 cd "$REPO_DIR"
 conda run -n "$ENV_NAME" pip install -e ".[dev]"
 
+echo "==> Installing optional external tool model databases ..."
+conda run -n "$ENV_NAME" --no-capture-output defense-finder update || echo "WARNING: DefenseFinder model installation failed."
+conda run -n "$ENV_NAME" --no-capture-output macsydata install -u CASFinder==3.1.0 || echo "WARNING: CRISPRCasFinder model installation failed."
+
 echo "==> Downloading annotation database ..."
 conda run -n "$ENV_NAME" --no-capture-output phage_contig_annotator download-db
 

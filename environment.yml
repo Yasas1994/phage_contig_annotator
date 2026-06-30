@@ -10,6 +10,9 @@ dependencies:
   - "seaborn>=0.12"
   - "trnascan-se=2.0.9"
   - trf
+  - "defense-finder>=3.0"
+  - "macsyfinder>=2.1.2"
+  - perl
 
   - pip:
     - bcbio-gff
