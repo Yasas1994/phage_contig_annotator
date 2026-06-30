@@ -29,6 +29,7 @@ class TestModuleFacades:
         assert utils.is_compressed is io.is_compressed
         assert utils.convert_to_fasta is io.convert_to_fasta
         assert utils.detect_sequence_format is io.detect_sequence_format
+        assert utils.split_fasta is io.split_fasta
 
     def test_validation_symbols_re_exported(self) -> None:
         assert utils.is_valid_dir is validation.is_valid_dir

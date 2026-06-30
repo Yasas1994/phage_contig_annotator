@@ -12,6 +12,7 @@ import os
 import shlex
 import shutil
 import subprocess as sp
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +79,32 @@ def run_defensefinder(out: str, in_: str, threads: int = 1) -> bool:
     return _run_tool(cmd, f"{out}.log", f"{out}.cmd")
 
 
+def _run_trf_single(out: str, in_: str) -> Path:
+    """Run TRF on a single FASTA file and return the path to the ``.dat`` output."""
+    in_path = Path(in_).resolve()
+    out_path = Path(f"{out}.dat")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    params = ["2", "7", "7", "80", "10", "50", "2000"]
+    dot_params = ".".join(params)
+    cmd = ["trf", "{input}", *params, "-d", "-h"]
+
+    with tempfile.TemporaryDirectory(dir=str(out_path.parent)) as run_dir:
+        local_fasta = Path(run_dir) / in_path.name
+        shutil.copy2(in_path, local_fasta)
+        cmd[1] = str(local_fasta)
+        success = _run_tool(
+            cmd, f"{out}.log", f"{out}.cmd", cwd=str(run_dir)
+        )
+        expected = Path(run_dir) / f"{in_path.name}.{dot_params}.dat"
+        if success and expected.exists():
+            expected.rename(out_path)
+        elif success and not out_path.exists():
+            out_path.touch()
+
+    return out_path
+
+
 def run_trf(out: str, in_: str, threads: int = 1) -> bool:
     """Run Tandem Repeats Finder (TRF) on a nucleotide FASTA file.
 
@@ -87,29 +114,44 @@ def run_trf(out: str, in_: str, threads: int = 1) -> bool:
     resulting ``.dat`` file is moved to ``{out}.dat``. If TRF produces no
     repeats and therefore no ``.dat`` file, an empty ``{out}.dat`` is created
     so downstream steps have a stable input.
+
+    When ``threads`` is greater than 1 and the input contains multiple
+    sequences, the input is split into at most ``threads`` chunks and TRF is
+    run on each chunk in parallel. The resulting ``.dat`` files are concatenated
+    to produce the final output.
     """
-    in_path = Path(in_).resolve()
+    from pca.io import read_fasta, split_fasta
+    from pca.parallel import async_parallel
+
     out_path = Path(f"{out}.dat")
-    work_dir = out_path.parent
-    work_dir.mkdir(parents=True, exist_ok=True)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    local_fasta = work_dir / in_path.name
-    shutil.copy2(in_path, local_fasta)
+    n_records = sum(1 for _ in read_fasta(in_))
+    n_chunks = max(1, min(threads, n_records))
+    if n_chunks == 1:
+        return _run_trf_single(out, in_).exists()
 
-    params = ["2", "7", "7", "80", "10", "50", "2000"]
-    dot_params = ".".join(params)
-    cmd = ["trf", str(local_fasta), *params, "-d", "-h"]
-    success = _run_tool(cmd, f"{out}.log", f"{out}.cmd", cwd=str(work_dir))
+    chunk_dir = out_path.parent / f"{out_path.stem}_chunks"
+    chunk_dir.mkdir(parents=True, exist_ok=True)
+    chunk_paths = split_fasta(in_, chunk_dir, n_chunks)
 
-    expected = work_dir / f"{in_path.name}.{dot_params}.dat"
-    if success and expected.exists():
-        expected.rename(out_path)
-    elif success and not out_path.exists():
-        out_path.touch()
+    chunk_outs = [str(chunk_dir / f"chunk_{i}") for i in range(len(chunk_paths))]
+    args = [
+        [chunk_out, str(chunk_path)]
+        for chunk_out, chunk_path in zip(chunk_outs, chunk_paths)
+    ]
+    async_parallel(_run_trf_single, args, threads=n_chunks)
 
-    if local_fasta.exists():
-        local_fasta.unlink()
+    with open(out_path, "w") as out_fh:
+        for chunk_out in chunk_outs:
+            chunk_dat = Path(f"{chunk_out}.dat")
+            if chunk_dat.exists() and chunk_dat.stat().st_size > 0:
+                content = chunk_dat.read_text()
+                out_fh.write(content)
+                if not content.endswith("\n"):
+                    out_fh.write("\n")
 
+    shutil.rmtree(chunk_dir, ignore_errors=True)
     return out_path.exists()
 
 

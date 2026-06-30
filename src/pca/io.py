@@ -11,7 +11,7 @@ import shutil
 from collections.abc import Iterator
 from enum import Enum, auto
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 from Bio import SeqIO
 
@@ -25,6 +25,7 @@ __all__ = [
     "get_compressed_file_handle",
     "is_compressed",
     "read_fasta",
+    "split_fasta",
 ]
 
 
@@ -129,6 +130,43 @@ def read_fasta(path: str | os.PathLike[str]) -> Iterator[tuple[str, str]]:
             seq = str(record.seq).upper()
             if name and seq:
                 yield name, seq
+
+
+def split_fasta(
+    input_path: str | os.PathLike[str],
+    output_dir: str | os.PathLike[str],
+    n_chunks: int,
+) -> list[Path]:
+    """Split a multi-FASTA into ``n_chunks`` chunk files.
+
+    Chunks are written to ``output_dir`` as ``chunk_0.fasta``,
+    ``chunk_1.fasta``, and so on. If ``n_chunks`` exceeds the number of
+    records, it is capped so that no empty chunk is produced. Records are kept
+    in their original order within each chunk.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    records = list(SeqIO.parse(get_compressed_file_handle(input_path), "fasta"))
+    n_chunks = max(1, min(n_chunks, len(records))) if records else 1
+    if n_chunks == 1:
+        single = output_dir / "chunk_0.fasta"
+        SeqIO.write(records, single, "fasta")
+        return [single]
+
+    chunk_size = (len(records) + n_chunks - 1) // n_chunks
+    chunks: list[list[Any]] = [[] for _ in range(n_chunks)]
+    for idx, record in enumerate(records):
+        chunk_idx = idx // chunk_size
+        chunks[chunk_idx].append(record)
+
+    paths: list[Path] = []
+    for i, chunk_records in enumerate(chunks):
+        chunk_path = output_dir / f"chunk_{i}.fasta"
+        SeqIO.write(chunk_records, chunk_path, "fasta")
+        paths.append(chunk_path)
+
+    return paths
 
 
 def check_fasta(path: str | os.PathLike[str], tmp_dir: str | os.PathLike[str]) -> None:

@@ -24,6 +24,7 @@ from pca.io import (
     get_compressed_file_handle,
     is_compressed,
     read_fasta,
+    split_fasta,
 )
 from pca.logutils import get_logger
 from pca.parallel import async_parallel
@@ -57,6 +58,7 @@ __all__ = [
     "get_compressed_file_handle",
     "is_compressed",
     "read_fasta",
+    "split_fasta",
     # validation
     "check_executables",
     "dbname",
