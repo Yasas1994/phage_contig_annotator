@@ -36,29 +36,44 @@ defensefinder_dir = output_dir / "defensefinder"
 defensefinder_genes_tsv = defensefinder_dir / "defense_finder_genes.tsv"
 
 
+proteins_faa = output_dir / "genes" / "proteins.faa"
+proteins_gff = output_dir / "genes" / "proteins.gff"
+genes_per_contig_dir = output_dir / "genes" / "per_contig"
+
+trna_tsv = output_dir / "trna" / "trna.tsv"
+trna_gff = output_dir / "trna" / "trna.gff"
+trna_per_contig_dir = output_dir / "trna" / "per_contig"
+
+trf_dat = output_dir / "trf" / "trf.dat"
+trf_per_contig_dir = output_dir / "trf" / "per_contig"
+
+hmmsearch_txt = output_dir / "hmm" / "hmmsearch.txt"
+hmmsearch_csv = output_dir / "hmm" / "hmmsearch.csv"
+hmm_per_contig_dir = output_dir / "hmm" / "per_contig"
+
+annotations_gff = output_dir / "annotations" / "annotations.gff"
+annotations_gbk = output_dir / "annotations" / "annotations.gbk"
+annotations_per_contig_dir = output_dir / "annotations" / "per_contig"
+plots_dir = output_dir / "plots"
+plot_done_files = [plots_dir / f".{fmt}_done" for fmt in plot_formats]
+
+
 def _extra_db_path(db):
     """Resolve the path for an optional extra database."""
     root = Path(extra_db_root) if extra_db_root else db_dir / "extra"
     return root / db
 
-proteins_faa = output_dir / "genes" / "proteins.faa"
-proteins_gff = output_dir / "genes" / "proteins.gff"
-trna_tsv = output_dir / "trna" / "trna.tsv"
-trna_gff = output_dir / "trna" / "trna.gff"
-trf_dat = output_dir / "trf" / "trf.dat"
-hmmsearch_txt = output_dir / "hmm" / "hmmsearch.txt"
-hmmsearch_csv = output_dir / "hmm" / "hmmsearch.csv"
-annotations_gff = output_dir / "annotations" / "annotations.gff"
-annotations_gbk = output_dir / "annotations" / "annotations.gbk"
-plots_dir = output_dir / "plots"
-plot_done_files = [plots_dir / f".{fmt}_done" for fmt in plot_formats]
-
 
 rule all:
-    """Final outputs: annotated GFF/GenBank and per-contig plots."""
+    """Final outputs: per-contig files plus the combined annotation files."""
     input:
         gff=annotations_gff,
         gbk=annotations_gbk,
+        genes_per_contig=genes_per_contig_dir,
+        hmm_per_contig=hmm_per_contig_dir,
+        trna_per_contig=trna_per_contig_dir,
+        trf_per_contig=trf_per_contig_dir,
+        annotations_per_contig=annotations_per_contig_dir,
         plots=plot_done_files,
 
 
@@ -107,6 +122,20 @@ else:
             shutil.copy(input.faa, output.faa)
 
 
+rule split_genes:
+    """Split combined gene outputs into per-contig files."""
+    input:
+        faa=proteins_faa,
+        gff=proteins_gff,
+    output:
+        directory(genes_per_contig_dir),
+    run:
+        from pca.io import split_fasta_by_contig, split_gff_by_contig
+
+        split_fasta_by_contig(input.faa, output[0], filename="proteins.faa")
+        split_gff_by_contig(input.gff, output[0], filename="proteins.gff")
+
+
 if run_trf:
 
     rule trf_calling:
@@ -134,6 +163,18 @@ else:
         run:
             with open(output.dat, "w") as fh:
                 fh.write("")
+
+
+rule split_trf:
+    """Split combined TRF output into per-contig files."""
+    input:
+        dat=trf_dat,
+    output:
+        directory(trf_per_contig_dir),
+    run:
+        from pca.io import split_trf_dat_by_contig
+
+        split_trf_dat_by_contig(input.dat, output[0], filename="trf.dat")
 
 
 if run_trna:
@@ -169,6 +210,20 @@ else:
                 fh.write("##gff-version 3\n")
 
 
+rule split_trna:
+    """Split combined tRNA outputs into per-contig files."""
+    input:
+        tsv=trna_tsv,
+        gff=trna_gff,
+    output:
+        directory(trna_per_contig_dir),
+    run:
+        from pca.io import split_gff_by_contig, split_trna_tsv_by_contig
+
+        split_trna_tsv_by_contig(input.tsv, output[0], filename="trna.tsv")
+        split_gff_by_contig(input.gff, output[0], filename="trna.gff")
+
+
 rule hmmsearch:
     """Search predicted proteins against HMM databases with pyhmmer."""
     input:
@@ -188,6 +243,22 @@ rule hmmsearch:
             output.txt,
             output.csv,
             threads=threads,
+        )
+
+
+rule split_hmm:
+    """Split combined HMM search output into per-contig files."""
+    input:
+        txt=hmmsearch_txt,
+        csv=hmmsearch_csv,
+    output:
+        directory(hmm_per_contig_dir),
+    run:
+        from pca.io import split_csv_by_contig, split_hmmsearch_by_contig
+
+        split_hmmsearch_by_contig(input.txt, output[0], filename="hmmsearch.txt")
+        split_csv_by_contig(
+            input.csv, output[0], filename="hmmsearch.csv", contig_column="qname"
         )
 
 
@@ -247,6 +318,7 @@ rule annotate:
     output:
         gff=annotations_gff,
         gbk=annotations_gbk,
+        per_contig=directory(annotations_per_contig_dir),
         done=plot_done_files,
     run:
         from pca.annotations import generate_plots_and_annotations

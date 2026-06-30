@@ -2441,6 +2441,8 @@ def generate_plots_and_annotations(
     logger.info("generating annotations and plots")
     gff_out_path = annotations_dir / "annotations.gff"
     gbk_out_path = annotations_dir / "annotations.gbk"
+    per_contig_dir = annotations_dir / "per_contig"
+    per_contig_dir.mkdir(parents=True, exist_ok=True)
 
     annotated_records: list[Any] = []
     with open(gff_out_path, "w") as out_handle:
@@ -2529,6 +2531,13 @@ def generate_plots_and_annotations(
             annotated_records.append(record)
             GFF.write([record], out_handle)
 
+    # Write per-contig GFF file as well.
+            contig_dir = per_contig_dir / record.id
+            contig_dir.mkdir(parents=True, exist_ok=True)
+            contig_gff = contig_dir / "annotations.gff"
+            with open(contig_gff, "w") as contig_handle:
+                GFF.write([record], contig_handle)
+
             contig_length = _contig_length(record)
 
             if "html" in requested_formats:
@@ -2551,7 +2560,17 @@ def generate_plots_and_annotations(
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", BiopythonWarning)
         SeqIO.write(annotated_records, gbk_out_path, "genbank")
-    logger.info("wrote %s and %s", gff_out_path, gbk_out_path)
+
+    # Write per-contig GenBank files as well.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", BiopythonWarning)
+        for record in annotated_records:
+            contig_dir = per_contig_dir / record.id
+            contig_dir.mkdir(parents=True, exist_ok=True)
+            contig_gbk = contig_dir / "annotations.gbk"
+            SeqIO.write([record], contig_gbk, "genbank")
+
+    logger.info("wrote %s, %s and per-contig files in %s", gff_out_path, gbk_out_path, per_contig_dir)
 
 
 # Backwards-compatible alias.
