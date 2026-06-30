@@ -144,3 +144,55 @@ class TestTRF:
         out_dat = Path(f"{out_prefix}.dat")
         assert out_dat.is_file()
         assert out_dat.stat().st_size == 0
+
+
+class TestDefenseFinder:
+    @staticmethod
+    def _make_fake_defensefinder(bin_dir: Path) -> None:
+        """Write a fake defense-finder executable that mimics output naming."""
+        script = bin_dir / "defense-finder"
+        nl = chr(10)
+        lines = [
+            "#!/usr/bin/env python",
+            "import sys, os",
+            "out_dir = None",
+            "i = 0",
+            "while i < len(sys.argv):",
+            "    if sys.argv[i] == '--out-dir':",
+            "        out_dir = sys.argv[i + 1]",
+            "        i += 2",
+            "    else:",
+            "        i += 1",
+            "in_file = sys.argv[-1]",
+            "base = os.path.splitext(os.path.basename(in_file))[0]",
+            "os.makedirs(out_dir, exist_ok=True)",
+            f"with open(os.path.join(out_dir, base + '_defense_finder_genes.tsv'), 'w') as fh:",
+            "    fh.write('replicon\\tgene\\tprofile\\tvcscore\\tvcscore')\n",  # truncated header
+            f"with open(os.path.join(out_dir, base + '_defense_finder_systems.tsv'), 'w') as fh:",
+            "    fh.write('sys_id\\tline')\n",
+            "print('done')",
+        ]
+        script.write_text(nl.join(lines))
+        script.chmod(0o755)
+
+    def test_run_defensefinder_renames_outputs(self, tmp_path: Path, monkeypatch) -> None:
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        self._make_fake_defensefinder(bin_dir)
+        monkeypatch.setenv(
+            "PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        )
+
+        faa = tmp_path / "proteins.faa"
+        faa.write_text(
+            ">g1\nMKTLLKLLL\n>g2\nMKTLLKLLL\n"
+        )
+
+        out_dir = tmp_path / "df"
+        assert externals.run_defensefinder(str(out_dir), str(faa), threads=2)
+
+        assert (out_dir / "defense_finder_genes.tsv").is_file()
+        assert (out_dir / "defense_finder_systems.tsv").is_file()
+        # Input-prefixed names should have been renamed away
+        assert not (out_dir / "proteins_defense_finder_genes.tsv").exists()
+        assert not (out_dir / "proteins_defense_finder_systems.tsv").exists()

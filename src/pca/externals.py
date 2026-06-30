@@ -113,11 +113,13 @@ def run_defensefinder(out: str, in_: str, threads: int = 1) -> bool:
     """Run DefenseFinder on a protein FASTA file.
 
     DefenseFinder detects anti-phage defense systems using profile HMMs and
-    system-specific rules. It writes ``defense_finder_genes.tsv`` and
-    ``defense_finder_systems.tsv`` under ``out``.
+    system-specific rules. It writes files named ``<input>_defense_finder_*.tsv``
+    under ``out``; this wrapper renames them to stable ``defense_finder_*.tsv``
+    names so the rest of the pipeline can depend on a fixed path.
     """
     out_path = Path(out)
     out_path.mkdir(parents=True, exist_ok=True)
+    in_path = Path(in_)
     cmd = [
         "defense-finder",
         "run",
@@ -125,7 +127,27 @@ def run_defensefinder(out: str, in_: str, threads: int = 1) -> bool:
         "--out-dir", str(out_path),
         in_,
     ]
-    return _run_tool(cmd, f"{out}.log", f"{out}.cmd")
+    success = _run_tool(cmd, f"{out}.log", f"{out}.cmd")
+    if not success:
+        return False
+
+    # DefenseFinder names outputs after the input basename (e.g.
+    # proteins_defense_finder_genes.tsv). Rename to stable names.
+    expected = {
+        f"{in_path.stem}_defense_finder_genes.tsv": "defense_finder_genes.tsv",
+        f"{in_path.stem}_defense_finder_systems.tsv": "defense_finder_systems.tsv",
+    }
+    for source_name, target_name in expected.items():
+        source = out_path / source_name
+        target = out_path / target_name
+        if source.exists() and not target.exists():
+            source.rename(target)
+        elif source.exists() and target.exists():
+            # Should not happen, but prefer the just-produced file.
+            target.unlink()
+            source.rename(target)
+
+    return (out_path / "defense_finder_genes.tsv").exists()
 
 
 def _run_trf_single(out: str, in_: str, flags: list[str] | None = None) -> Path:
