@@ -330,8 +330,8 @@ class TestComputeGenomeStatsWithMulticopy:
 
         multicopy_tsv = tmp_path / "multicopy.tsv"
         multicopy_tsv.write_text(
-            "contig_id\tcontig_len\tmean_kmer_freq\tcopies_kmer\tfft_period_bp\tfft_snr\tcopies_fft\tcopies_final\tgenome_unit_bp\tconfidence\tflag\n"
-            "contig1\t20\t2.5\t3\t500\t4.0\t2\t3\t500\tmedium\tagreement\n"
+            "contig_id\tcontig_len\tmean_kmer_freq\tcopies_kmer\tvalidator\tvalidator_score\tvalidator_snr\tvalidator_ok\tcopies_final\tconfidence\tflag\tnote\n"
+            "contig1\t20\t2.5\t3\tminimap2\t0.95\t3.8\ttrue\t3\tmedium\tagreement\tkmer+minimap2\n"
         )
 
         df = genome_stats.compute_genome_stats(
@@ -341,7 +341,9 @@ class TestComputeGenomeStatsWithMulticopy:
         assert df.iloc[0]["copies_final"] == 3
         assert df.iloc[0]["multicopy_confidence"] == "medium"
         assert df.iloc[0]["multicopy_flag"] == "agreement"
-        assert df.iloc[0]["genome_unit_bp"] == 500
+        assert df.iloc[0]["validator_score"] == 0.95
+        assert df.iloc[0]["validator_snr"] == 3.8
+        assert df.iloc[0]["validator_ok"] == True
 
     def test_missing_multicopy_tsv_is_ignored(self, tmp_path: Path) -> None:
         fasta = tmp_path / "input.fna"

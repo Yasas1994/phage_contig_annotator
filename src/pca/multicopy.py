@@ -10,278 +10,283 @@ complementary methods:
    partial contigs.
 """
 
+
 from __future__ import annotations
 
-from collections import Counter
-from pathlib import Path
+import os
+import subprocess
+import sys
+import tempfile
 from typing import Optional
 
 import numpy as np
-import pandas as pd
 from Bio import SeqIO
 
-logger = None  # logging is optional; imported lazily where needed
 
-# Optional kcounter (CheckV uses this). Falls back to pure Python if absent.
+# ── optional kcounter ────────────────────────────────────────────────────────
 try:
     import kcounter
+    _HAS_KCOUNTER = True
+except ImportError:
+    _HAS_KCOUNTER = False
 
-    HAS_KCOUNTER = True
-except ImportError:  # pragma: no cover
-    HAS_KCOUNTER = False
+
+# ════════════════════════════════════════════════════════════════════════════
+# CONSTANTS
+# ════════════════════════════════════════════════════════════════════════════
+
+KMER_K              = 21
+KMER_COPY_THRESHOLD = 1.3
+
+WARN_COPIES         = 2
+FAIL_COPIES         = 3
+MIN_LEN_DEFAULT     = 2000
 
 
 _RC_TABLE = str.maketrans("ACGTacgt", "TGCAtgca")
 
-
-def _reverse_complement(seq: str) -> str:
+def _rc(seq: str) -> str:
     return seq.translate(_RC_TABLE)[::-1]
 
-
-def _canonical_kmer(kmer: str) -> str:
-    """Return the lexicographically smaller of a k-mer and its reverse complement."""
-    rc = _reverse_complement(kmer)
+def _canonical(kmer: str) -> str:
+    rc = _rc(kmer)
     return kmer if kmer <= rc else rc
 
 
-def _count_kmers_python(seq: str, k: int, canonical_kmers: bool = True) -> Counter:
-    """Pure-Python k-mer counter (fallback when kcounter is unavailable)."""
-    seq = seq.upper()
-    counts: Counter = Counter()
+def _count_kmers_python(seq: str, k: int) -> dict[str, int]:
+    counts: dict[str, int] = {}
     for i in range(len(seq) - k + 1):
-        kmer = seq[i : i + k]
-        if "N" in kmer:
+        km = seq[i:i + k]
+        if 'N' in km:
             continue
-        counts[_canonical_kmer(kmer) if canonical_kmers else kmer] += 1
+        ck = _canonical(km)
+        counts[ck] = counts.get(ck, 0) + 1
     return counts
 
 
-def mean_kmer_frequency(seq: str, k: int = 21) -> Optional[float]:
-    """
-    CheckV-style mean k-mer frequency.
-
-    For a single-copy genome most k-mers appear once, so the mean is ≈ 1.0.
-    For N tandem copies the same k-mers appear roughly N times, so the mean
-    is ≈ N.
-
-    Returns ``None`` if the sequence is too short to count k-mers.
-    """
+def mean_kmer_freq(seq: str, k: int = KMER_K) -> Optional[float]:
+    """Mean count of canonical k-mers. Scales linearly with copy number."""
     if len(seq) < k:
         return None
-
-    if HAS_KCOUNTER:
+    if _HAS_KCOUNTER:
         counts = list(kcounter.count_kmers(seq, k, canonical_kmers=True).values())
     else:
-        counts = list(_count_kmers_python(seq, k, canonical_kmers=True).values())
-
-    if not counts:
-        return None
-    return float(np.mean(counts))
+        counts = list(_count_kmers_python(seq, k).values())
+    return float(np.mean(counts)) if counts else None
 
 
-def sliding_gc_content(seq: str, window: int, step: int) -> np.ndarray:
-    """Return GC fraction in sliding windows across ``seq``."""
-    seq = seq.upper()
-    gc_vals = []
-    for i in range(0, len(seq) - window + 1, step):
-        w = seq[i : i + window]
-        gc = (w.count("G") + w.count("C")) / len(w)
-        gc_vals.append(gc)
-    return np.array(gc_vals)
+
+# minimap2 validator 
+
+def _run_minimap2_self(seq: str, contig_id: str = "c") -> list[dict]:
+    """Self-align with minimap2. Returns PAF records (excluding diagonal)."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".fa", delete=False) as f:
+        f.write(f">{contig_id}\n{seq}\n")
+        tmp = f.name
+
+    try:
+        cmd = [
+            "minimap2", "-x", "asm5", "-N", "50",
+            "--secondary=yes", "-p", "0.05", tmp, tmp,
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if proc.returncode != 0:
+            raise RuntimeError(f"minimap2 failed: {proc.stderr}")
+    finally:
+        os.unlink(tmp)
+
+    alns = []
+    for line in proc.stdout.strip().split("\n"):
+        if not line:
+            continue
+        cols = line.split("\t")
+        if len(cols) < 12:
+            continue
+
+        qname, qlen, qstart, qend, strand, tname, tlen, tstart, tend = cols[:9]
+        nmatch, alen, mapq = cols[9:12]
+
+        # Skip trivial diagonal self-alignment
+        if (qname == tname and
+            abs(int(qstart) - int(tstart)) < 50 and
+            abs(int(qend) - int(tend)) < 50):
+            continue
+
+        alns.append({
+            "qstart": int(qstart), "qend": int(qend),
+            "tstart": int(tstart), "tend": int(tend),
+            "strand": strand,
+            "nmatch": int(nmatch), "alen": int(alen),
+            "mapq": int(mapq),
+        })
+    return alns
 
 
-def fft_dominant_period(
-    signal: np.ndarray,
-    step: int,
-    contig_len: int,
-    min_period_bp: int = 1000,
-) -> tuple[Optional[float], Optional[float]]:
-    """
-    Run FFT on a 1D signal and return the dominant period and its SNR.
+def minimap2_validator(seq: str, contig_len: int, kmer_copies: int,
+                       min_identity: float = 0.80,
+                       len_frac: float = 0.40) -> dict:
+    """Validate tandem repeat via minimap2 self-alignment."""
+    expected_unit = contig_len / kmer_copies
 
-    Returns ``(None, None)`` if the signal has fewer than 4 points or no
-    plausible period is found.
-    """
-    n = len(signal)
-    if n < 4:
-        return None, None
+    alns = _run_minimap2_self(seq)
 
-    detrended = signal - signal.mean()
-    fft_mag = np.abs(np.fft.rfft(detrended))
-    freqs = np.fft.rfftfreq(n, d=step)  # cycles per bp
+    if not alns:
+        return {"ok": False, "note": "no_alignments"}
 
-    # Exclude DC and convert to periods in bp.
-    fft_mag_no_dc = fft_mag[1:]
-    freqs_no_dc = freqs[1:]
+    good = []
+    for a in alns:
+        if a["strand"] != "+":
+            continue
+        aln_len = a["qend"] - a["qstart"]
+        if aln_len < expected_unit * len_frac:
+            continue
+        identity = a["nmatch"] / a["alen"] if a["alen"] > 0 else 0
+        if identity < min_identity:
+            continue
+        offset = a["tstart"] - a["qstart"]
+        if offset <= 0:
+            continue
+        ratio = offset / expected_unit
+        if abs(ratio - round(ratio)) > 0.25:
+            continue
+        good.append({**a, "identity": identity, "offset": offset})
 
-    max_period_bp = contig_len / 1.5
-    valid = (1.0 / freqs_no_dc >= min_period_bp) & (1.0 / freqs_no_dc <= max_period_bp)
+    if not good:
+        return {"ok": False, "note": "no_tandem_alignments"}
 
-    if not valid.any():
-        return None, None
+    # Boundaries
+    expected_boundaries = [int(round(i * expected_unit))
+                           for i in range(1, kmer_copies)]
+    all_coords = []
+    for a in good:
+        all_coords.extend([a["tstart"], a["tend"]])
+    boundaries = []
+    for eb in expected_boundaries:
+        if not all_coords:
+            break
+        closest = min(all_coords, key=lambda x: abs(x - eb))
+        if abs(closest - eb) <= expected_unit * 0.15:
+            boundaries.append(closest)
+    boundaries = sorted(set(boundaries))
 
-    valid_mag = fft_mag_no_dc.copy()
-    valid_mag[~valid] = 0.0
+    # Coverage
+    coverage = np.zeros(contig_len, dtype=bool)
+    for a in good:
+        coverage[a["tstart"]:a["tend"]] = True
+    repeat_fraction = float(coverage.mean())
 
-    peak_idx = int(np.argmax(valid_mag))
-    peak_period_bp = 1.0 / freqs_no_dc[peak_idx]
-    peak_power_ratio = float(
-        valid_mag[peak_idx] / (np.mean(fft_mag_no_dc[valid]) + 1e-9)
-    )
-
-    return peak_period_bp, peak_power_ratio
-
-
-def reconcile_copy_number(
-    contig_len: int,
-    mean_kmer_freq: Optional[float],
-    fft_period_bp: Optional[float],
-    fft_snr: Optional[float],
-    kmer_threshold: float = 1.3,
-    fft_snr_threshold: float = 3.0,
-) -> dict:
-    """
-    Combine k-mer and FFT signals into a final copy-number call.
-
-    Returns ``copies_kmer``, ``copies_fft``, ``copies_final``,
-    ``genome_unit_bp``, ``confidence`` and ``flag``.
-    """
-    result = {
-        "copies_kmer": None,
-        "copies_fft": None,
-        "copies_final": 1,
-        "genome_unit_bp": None,
-        "confidence": "low",
-        "flag": "insufficient_data",
-    }
-
-    kmer_copies = None
-    if mean_kmer_freq is not None:
-        kmer_copies = max(1, round(mean_kmer_freq))
-        result["copies_kmer"] = kmer_copies
-
-    fft_copies = None
-    if fft_period_bp is not None and fft_snr is not None:
-        if fft_snr >= fft_snr_threshold:
-            fft_copies = max(1, round(contig_len / fft_period_bp))
-            result["copies_fft"] = fft_copies
-            result["genome_unit_bp"] = int(round(fft_period_bp))
-
-    kmer_positive = (kmer_copies is not None) and (mean_kmer_freq >= kmer_threshold)
-    fft_positive = fft_copies is not None and fft_copies >= 2
-
-    if not kmer_positive and not fft_positive:
-        result.update(copies_final=1, confidence="high", flag="single_copy")
-    elif kmer_positive and fft_positive:
-        if kmer_copies == fft_copies:
-            result.update(
-                copies_final=kmer_copies,
-                genome_unit_bp=result["genome_unit_bp"],
-                confidence="high",
-                flag="agreement",
-            )
-        else:
-            result.update(
-                copies_final=kmer_copies,
-                genome_unit_bp=result["genome_unit_bp"],
-                confidence="low",
-                flag=f"disagreement_kmer={kmer_copies}_fft={fft_copies}",
-            )
-    elif kmer_positive and not fft_positive:
-        result.update(
-            copies_final=kmer_copies,
-            confidence="medium",
-            flag="kmer_only_uniform_gc_suspected",
-        )
-    elif not kmer_positive and fft_positive:
-        result.update(
-            copies_final=fft_copies,
-            genome_unit_bp=result["genome_unit_bp"],
-            confidence="medium",
-            flag="fft_only_possible_chimera",
-        )
-
-    return result
-
-
-def analyze_contig(
-    seq: str,
-    k: int = 21,
-    window: int = 500,
-    step: int = 100,
-    min_period_bp: int = 1000,
-) -> dict:
-    """Run both multi-copy detection methods and return a combined result."""
-    seq = seq.upper().replace(" ", "")
-    contig_len = len(seq)
-
-    mean_kf = mean_kmer_frequency(seq, k)
-    gc = sliding_gc_content(seq, window, step)
-    fft_period, fft_snr = fft_dominant_period(gc, step, contig_len, min_period_bp)
-    rec = reconcile_copy_number(contig_len, mean_kf, fft_period, fft_snr)
+    mean_identity = float(np.mean([a["identity"] for a in good]))
+    inferred = len(boundaries) + 1 if boundaries else kmer_copies
 
     return {
-        "contig_len": contig_len,
-        "mean_kmer_freq": round(mean_kf, 4) if mean_kf is not None else None,
-        "fft_period_bp": int(round(fft_period)) if fft_period is not None else None,
-        "fft_snr": round(fft_snr, 2) if fft_snr is not None else None,
-        "gc_windows": len(gc),
-        **rec,
+        "ok": True,
+        "mean_identity": mean_identity,
+        "boundaries": boundaries,
+        "repeat_fraction": repeat_fraction,
+        "inferred_copies": inferred,
+        "n_alignments": len(good),
+        "note": "minimap2_confirmed",
     }
 
 
-def detect_multicopy(
-    fasta_path: str | Path,
-    k: int = 21,
-    window: int = 500,
-    step: int = 100,
-    min_period_bp: int = 1000,
-    min_len: int = 2000,
-) -> pd.DataFrame:
-    """
-    Run multi-copy detection on every contig in ``fasta_path``.
+def _safe_float(v) -> Optional[float]:
+    if v is None:
+        return None
+    try:
+        f = float(v)
+    except (ValueError, OverflowError, TypeError):
+        return None
+    if f != f or f == float('inf') or f == float('-inf'):
+        return None
+    return f
 
-    Returns a ``pandas.DataFrame`` with one row per contig and columns for
-    copy-number estimates, confidence, and flag.
-    """
-    rows = []
-    for rec in SeqIO.parse(str(fasta_path), "fasta"):
-        seq = str(rec.seq)
-        if len(seq) < min_len:
-            continue
-        row = analyze_contig(seq, k=k, window=window, step=step, min_period_bp=min_period_bp)
-        row["contig_id"] = rec.id
-        rows.append(row)
 
-    if not rows:
-        return pd.DataFrame(
-            columns=[
-                "contig_id",
-                "contig_len",
-                "mean_kmer_freq",
-                "copies_kmer",
-                "fft_period_bp",
-                "fft_snr",
-                "copies_fft",
-                "copies_final",
-                "genome_unit_bp",
-                "confidence",
-                "flag",
-            ]
+def analyze(seq: str, k: int = KMER_K) -> dict:
+    """
+    Run copy-number detection on a single sequence.
+    Primary: mean k-mer frequency.
+    Validator: minimap2 self-alignment.
+    """
+    try:
+        seq = str(seq).upper().replace(" ", "").replace("\n", "")
+    except Exception:
+        seq = ""
+    L = len(seq)
+
+    _safe_ret = {
+        "contig_len": L, "mean_kmer_freq": None, "copies_kmer": 1,
+        "validator": "error", "validator_score": None, "validator_snr": None,
+        "validator_ok": False, "copies_final": 1,
+        "confidence": "low", "flag": "PASS", "note": "analysis_error",
+    }
+
+    try:
+        # Method 1: mean k-mer frequency
+        mkf = mean_kmer_freq(seq, k)
+        mkf = _safe_float(mkf)
+
+        # Low-complexity guard
+        if mkf is not None:
+            if _HAS_KCOUNTER:
+                n_unique = len(kcounter.count_kmers(seq, k, canonical_kmers=True))
+            else:
+                n_unique = len(_count_kmers_python(seq, k))
+            if n_unique < max(10, (L - k + 1) * 0.10):
+                mkf = None
+
+        copies_kmer = max(1, round(mkf)) if mkf is not None else 1
+        kmer_pos = (mkf is not None) and (copies_kmer >= 2) and (mkf >= KMER_COPY_THRESHOLD)
+
+        # Defaults
+        validator = "none"
+        validator_score = None
+        validator_snr = None
+        validator_ok = False
+        copies_final = copies_kmer if kmer_pos else 1
+        confidence = "high"
+        note = "single_copy"
+
+        if kmer_pos and copies_kmer >= 2:
+            mm = minimap2_validator(seq, L, copies_kmer)
+            validator = "minimap2"
+            validator_score = _safe_float(mm.get("mean_identity"))
+            if mm.get("mean_identity") is not None:
+                validator_snr = _safe_float(mm["mean_identity"] / 0.25)
+            validator_ok = mm["ok"]
+
+            if validator_ok:
+                if abs(mm["inferred_copies"] - copies_kmer) <= 1:
+                    copies_final = mm["inferred_copies"]
+                confidence = "high"
+                note = (f"kmer+minimap2_confirmed "
+                        f"boundaries={mm.get('boundaries', [])} "
+                        f"repeat_frac={mm['repeat_fraction']:.2f}")
+            else:
+                confidence = "medium"
+                note = f"kmer_only_minimap2_{mm['note']}"
+
+        flag = (
+            "FAIL" if copies_final >= FAIL_COPIES else
+            "WARN" if copies_final >= WARN_COPIES else
+            "PASS"
         )
 
-    df = pd.DataFrame(rows)
-    column_order = [
-        "contig_id",
-        "contig_len",
-        "mean_kmer_freq",
-        "copies_kmer",
-        "fft_period_bp",
-        "fft_snr",
-        "copies_fft",
-        "copies_final",
-        "genome_unit_bp",
-        "confidence",
-        "flag",
-    ]
-    return df[[c for c in column_order if c in df.columns]]
+        return {
+            "contig_len": L,
+            "mean_kmer_freq": _safe_float(mkf),
+            "copies_kmer": copies_kmer,
+            "validator": validator,
+            "validator_score": _safe_float(validator_score),
+            "validator_snr": _safe_float(validator_snr),
+            "validator_ok": validator_ok,
+            "copies_final": copies_final,
+            "confidence": confidence,
+            "flag": flag,
+            "note": note,
+        }
+
+    except Exception as exc:
+        import traceback as _tb
+        print(f"[warn] analyze() error (len={L}): {exc}", file=sys.stderr)
+        _safe_ret["contig_len"] = L
+        return _safe_ret

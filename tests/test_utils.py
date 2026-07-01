@@ -676,8 +676,8 @@ class TestAnnotations:
 
         stats_tsv = tmp_path / "stats.tsv"
         stats_tsv.write_text(
-            "contig_id\tlength\tn_genes\tmean_kmer_freq\tcopies_final\tgenome_unit_bp\tmulticopy_confidence\tmulticopy_flag\n"
-            "contig1\t903\t1\t2.5\t3\t300\thigh\tagreement\n"
+            "contig_id\tlength\tn_genes\tmean_kmer_freq\tcopies_kmer\tvalidator\tvalidator_score\tvalidator_snr\tvalidator_ok\tcopies_final\tmulticopy_confidence\tmulticopy_flag\tnote\n"
+            "contig1\t903\t1\t2.5\t3\tminimap2\t0.95\t3.8\ttrue\t3\thigh\tagreement\tkmer+minimap2\n"
         )
 
         out_dir = tmp_path / "out"

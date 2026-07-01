@@ -18,7 +18,7 @@ import pandas as pd
 from BCBio import GFF
 
 from pca.io import get_compressed_file_handle, read_fasta
-from pca.multicopy import detect_multicopy
+from pca.multicopy import analyze
 from pca.parsers import parse_crispr_cas_finder_gff, parse_minced_gff, parse_trf_dat
 
 logger = logging.getLogger(__name__)
@@ -276,9 +276,23 @@ def compute_genome_stats(
         if multicopy_path_obj.is_file() and multicopy_path_obj.stat().st_size > 0:
             multicopy_df = pd.read_csv(multicopy_path_obj, sep="\t", low_memory=False)
             if not multicopy_df.empty:
-                keep_cols = ["contig_id", "mean_kmer_freq", "copies_kmer", "fft_period_bp", "fft_snr", "copies_fft", "copies_final", "genome_unit_bp", "confidence", "flag"]
+                keep_cols = [
+                    "contig_id",
+                    "mean_kmer_freq",
+                    "copies_kmer",
+                    "validator",
+                    "validator_score",
+                    "validator_snr",
+                    "validator_ok",
+                    "copies_final",
+                    "confidence",
+                    "flag",
+                    "note",
+                ]
                 multicopy_df = multicopy_df[[c for c in keep_cols if c in multicopy_df.columns]]
-                multicopy_df = multicopy_df.rename(columns={"confidence": "multicopy_confidence", "flag": "multicopy_flag"})
+                multicopy_df = multicopy_df.rename(
+                    columns={"confidence": "multicopy_confidence", "flag": "multicopy_flag"}
+                )
                 df = df.merge(multicopy_df, on="contig_id", how="left")
 
     if not df.empty:
@@ -299,13 +313,14 @@ def compute_genome_stats(
             "total_crispr_array_length",
             "mean_kmer_freq",
             "copies_kmer",
-            "fft_period_bp",
-            "fft_snr",
-            "copies_fft",
+            "validator",
+            "validator_score",
+            "validator_snr",
+            "validator_ok",
             "copies_final",
-            "genome_unit_bp",
             "multicopy_confidence",
             "multicopy_flag",
+            "note",
         ]
         # Only include columns that actually exist (optional inputs may be missing).
         df = df[[c for c in column_order if c in df.columns]]

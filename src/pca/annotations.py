@@ -1687,13 +1687,14 @@ def _stats_table_html(stats: dict[str, Any] | None) -> str:
         ("Total CRISPR array length", "total_crispr_array_length", "{v:.0f}"),
         ("Mean k-mer frequency", "mean_kmer_freq", "{v:.4f}"),
         ("Copy number (k-mer)", "copies_kmer", "{v:.0f}"),
-        ("FFT period", "fft_period_bp", "{v:.0f} bp"),
-        ("FFT SNR", "fft_snr", "{v:.2f}"),
-        ("Copy number (FFT)", "copies_fft", "{v:.0f}"),
+        ("Validator", "validator", "{v}"),
+        ("Validator score", "validator_score", "{v:.4f}"),
+        ("Validator SNR", "validator_snr", "{v:.2f}"),
+        ("Validator OK", "validator_ok", "{v}"),
         ("Final copy number", "copies_final", "{v:.0f}"),
-        ("Genome unit length", "genome_unit_bp", "{v:.0f} bp"),
         ("Multi-copy confidence", "multicopy_confidence", "{v}"),
         ("Multi-copy flag", "multicopy_flag", "{v}"),
+        ("Note", "note", "{v}"),
     ]
 
     rows_html = []

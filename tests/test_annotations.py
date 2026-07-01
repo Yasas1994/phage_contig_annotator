@@ -162,8 +162,8 @@ def test_stats_table_html_renders_nan_as_dash() -> None:
     stats = {
         "length": 5000,
         "n_genes": 10,
-        "genome_unit_bp": float("nan"),
-        "fft_snr": float("nan"),
+        "validator_score": float("nan"),
+        "validator_snr": float("nan"),
     }
     html = _stats_table_html(stats)
     assert "Genome statistics" in html
