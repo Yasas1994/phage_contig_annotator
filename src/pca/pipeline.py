@@ -41,6 +41,9 @@ def _iter_hmms(db_path: Path) -> Iterator[HMM]:
             yield from hmm_file
         return
     for path in sorted(db_path.rglob("*.hmm")):
+        # Skip macOS resource forks (AppleDouble) and other hidden files.
+        if path.name.startswith("."):
+            continue
         with HMMFile(path) as hmm_file:
             yield from hmm_file
 
