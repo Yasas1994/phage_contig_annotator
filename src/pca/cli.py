@@ -109,6 +109,7 @@ def download_dbs(path: str) -> bool:
         desc="database.tar.gz",
         miniters=1,
         dynamic_ncols=True,
+        bar_format="{desc}: {percentage:3.0f}%|{bar:5}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]",
     ) as pbar:
         with open(tar_file_path, "wb") as file:
             for chunk in response.iter_content(chunk_size=1024 * 1024):
