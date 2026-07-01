@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 import json
 import logging
+import math
 import os
 import re
 import warnings
@@ -1660,6 +1661,14 @@ def _compute_gc_metrics(
     return positions, gc_values, skew_values, cumulative_skew
 
 
+def _is_nan(value: Any) -> bool:
+    """Return True if ``value`` is a float NaN."""
+    try:
+        return math.isnan(value)
+    except TypeError:
+        return False
+
+
 def _stats_table_html(stats: dict[str, Any] | None) -> str:
     """Return a static HTML table for per-contig statistics, or an empty notice."""
     if not stats:
@@ -1692,10 +1701,13 @@ def _stats_table_html(stats: dict[str, Any] | None) -> str:
         value = stats.get(key)
         if value is None or value == "":
             continue
-        try:
-            formatted = fmt.format(v=value)
-        except (ValueError, TypeError):
-            formatted = str(value)
+        if _is_nan(value):
+            formatted = "-"
+        else:
+            try:
+                formatted = fmt.format(v=value)
+            except (ValueError, TypeError):
+                formatted = str(value)
         rows_html.append(f"<tr><th>{html.escape(label)}</th><td>{html.escape(formatted)}</td></tr>")
 
     if not rows_html:

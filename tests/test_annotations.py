@@ -158,6 +158,22 @@ def test_stats_table_html_renders_non_empty_stats() -> None:
     assert "agreement" in html
 
 
+def test_stats_table_html_renders_nan_as_dash() -> None:
+    stats = {
+        "length": 5000,
+        "n_genes": 10,
+        "genome_unit_bp": float("nan"),
+        "fft_snr": float("nan"),
+    }
+    html = _stats_table_html(stats)
+    assert "Genome statistics" in html
+    assert "5,000 bp" in html
+    assert "10" in html
+    # NaN values should render as "-", not "nan".
+    assert html.count(">-</td>") == 2
+    assert "nan" not in html.lower()
+
+
 def test_stats_table_html_returns_empty_notice_for_none() -> None:
     html = _stats_table_html(None)
     assert "No genome statistics available" in html
