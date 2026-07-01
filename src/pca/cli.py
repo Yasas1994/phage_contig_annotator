@@ -90,7 +90,7 @@ def download_dbs(path: str) -> bool:
     )
     os.makedirs(path, exist_ok=True)
 
-    response = requests.get(url, stream=True, timeout=300)
+    response = requests.get(url, stream=True, timeout=(30, 600))
     if response.status_code != 200:
         click.echo(
             f"Failed to download the database from {url}. "
@@ -100,14 +100,21 @@ def download_dbs(path: str) -> bool:
         return False
 
     tar_file_path = Path(path) / "database.tar.gz"
-    total_size = int(response.headers.get("content-length", 0))
-    pbar = tqdm.tqdm(total=total_size / (1024 * 1024), unit="MB")
-    with open(tar_file_path, "wb") as file:
-        for chunk in response.iter_content(chunk_size=1024):
-            if chunk:
-                pbar.update(len(chunk) / (1024 * 1024))
-                file.write(chunk)
-    pbar.close()
+    total_size = int(response.headers.get("content-length", 0)) or None
+    with tqdm.tqdm(
+        total=total_size,
+        unit="B",
+        unit_scale=True,
+        unit_divisor=1024,
+        desc="database.tar.gz",
+        miniters=1,
+        dynamic_ncols=True,
+    ) as pbar:
+        with open(tar_file_path, "wb") as file:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    file.write(chunk)
+                    pbar.update(len(chunk))
 
     base_path = Path(path).resolve()
     with tarfile.open(tar_file_path, "r:gz") as tar:
