@@ -20,6 +20,7 @@ import tempfile
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 from Bio import SeqIO
 
 
@@ -290,3 +291,42 @@ def analyze(seq: str, k: int = KMER_K) -> dict:
         print(f"[warn] analyze() error (len={L}): {exc}", file=sys.stderr)
         _safe_ret["contig_len"] = L
         return _safe_ret
+
+
+def detect_multicopy(
+    fasta_path: str | os.PathLike[str],
+    k: int = KMER_K,
+    **_,
+) -> pd.DataFrame:
+    """Run multi-copy detection on every contig in a FASTA file.
+
+    Returns a DataFrame with one row per contig and the columns expected by
+    :func:`pca.genome_stats.compute_genome_stats`.
+    """
+    rows = []
+    with open(fasta_path, "r") as fh:
+        for record in SeqIO.parse(fh, "fasta"):
+            result = analyze(str(record.seq), k=k)
+            result["contig_id"] = record.id
+            rows.append(result)
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+
+    column_order = [
+        "contig_id",
+        "contig_len",
+        "mean_kmer_freq",
+        "copies_kmer",
+        "validator",
+        "validator_score",
+        "validator_snr",
+        "validator_ok",
+        "copies_final",
+        "confidence",
+        "flag",
+        "note",
+    ]
+    present = [c for c in column_order if c in df.columns]
+    return df[present]

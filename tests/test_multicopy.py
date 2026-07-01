@@ -1,4 +1,6 @@
 """Unit tests for pca.multicopy."""
+import pytest
+from pathlib import Path
 from unittest.mock import patch
 
 from pca.multicopy import (
@@ -7,6 +9,7 @@ from pca.multicopy import (
     _rc,
     _safe_float,
     analyze,
+    detect_multicopy,
     mean_kmer_freq,
     minimap2_validator,
 )
@@ -98,3 +101,20 @@ def test_minimap2_validator_no_alignments() -> None:
         result = minimap2_validator("ATCG" * 100, 400, 2)
     assert result["ok"] is False
     assert result["note"] == "no_alignments"
+
+
+def test_detect_multicopy_returns_dataframe_for_fasta(tmp_path: Path) -> None:
+    fasta = tmp_path / "input.fna"
+    fasta.write_text(
+        ">short\n" + "ATCG" * 10 + "\n"  # 40 bp
+        ">long\n" + "ATCG" * 600 + "\n"  # 2400 bp
+    )
+    df = detect_multicopy(fasta, k=21)
+    assert len(df) == 2
+    assert set(df.columns) >= {
+        "contig_id", "contig_len", "mean_kmer_freq", "copies_kmer",
+        "validator", "validator_score", "validator_snr", "validator_ok",
+        "copies_final", "confidence", "flag", "note",
+    }
+    long_row = df[df["contig_id"] == "long"].iloc[0]
+    assert long_row["contig_len"] == 2400
