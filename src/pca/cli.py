@@ -86,7 +86,7 @@ def download_dbs(path: str) -> bool:
 
     url = (
         "https://nextcloud.uni-greifswald.de/index.php/s/"
-        "ZSRSABMgoWMYAcB/download/database.tar.gz"
+        "3NbY2CPn74M5C9R/download/database.tar.gz"
     )
     os.makedirs(path, exist_ok=True)
 
