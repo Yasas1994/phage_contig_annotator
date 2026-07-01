@@ -2,8 +2,8 @@
 
 ``prodigal-gv`` and ``hmmsearch`` have been replaced by Python libraries
 (``pyrodigal-gv`` and ``pyhmmer``); ``tRNAscan-SE``, Tandem Repeats Finder
-(``trf``), PHANOTATE, and DefenseFinder are the remaining external
-dependencies.
+(``trf``), PHANOTATE, DefenseFinder, CRISPRCasFinder and MinCED are the
+remaining external dependencies.
 """
 
 from __future__ import annotations
@@ -19,7 +19,14 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["run_crispr_cas_finder", "run_defensefinder", "run_phanotate", "run_trf", "run_trnascan"]
+__all__ = [
+    "run_crispr_cas_finder",
+    "run_defensefinder",
+    "run_minced",
+    "run_phanotate",
+    "run_trf",
+    "run_trnascan",
+]
 
 
 def _phanotate_executable() -> str:
@@ -36,6 +43,25 @@ def _crispr_cas_finder_executable() -> str | None:
         if shutil.which(cmd):
             return cmd
     return None
+
+
+def run_minced(out: str, in_: str) -> bool:
+    """Run MinCED on a nucleotide FASTA file.
+
+    MinCED detects CRISPR arrays and writes a table file to ``{out}.crisprs``
+    and a GFF3 file to ``{out}.gff``. The ``out`` argument is treated as a
+    prefix.
+    """
+    if shutil.which("minced") is None:
+        logger.error("minced not found on PATH; skipping CRISPR array detection")
+        return False
+
+    out_path = Path(out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    table_out = f"{out}.crisprs"
+    gff_out = f"{out}.gff"
+    cmd = ["minced", in_, table_out, gff_out]
+    return _run_tool(cmd, f"{out}.log", f"{out}.cmd")
 
 
 def _run_tool(

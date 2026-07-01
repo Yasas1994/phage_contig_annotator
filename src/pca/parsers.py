@@ -16,6 +16,7 @@ __all__ = [
     "parse_crispr_cas_finder_gff",
     "parse_defensefinder_genes",
     "parse_hmmsearch",
+    "parse_minced_gff",
     "parse_trf_dat",
     "parse_trna",
     "parse_trna_gff",
@@ -177,6 +178,28 @@ def parse_crispr_cas_finder_gff(path: str | Path) -> Iterator[dict[str, Any]]:
     Yields one record per CRISPR array feature (type ``CRISPR``), with keys
     ``qname``, ``begin``, ``end``, ``score``, ``strand`` and ``attributes``.
     """
+    yield from _parse_crispr_array_features(path, feature_type="CRISPR")
+
+
+def parse_minced_gff(path: str | Path) -> Iterator[dict[str, Any]]:
+    """Parse MinCED GFF output.
+
+    Yields one record per CRISPR array feature (type ``repeat_region`` with
+    attribute ``rpt_family=CRISPR``), with keys ``qname``, ``begin``,
+    ``end``, ``score``, ``strand`` and ``attributes``.
+    """
+    yield from _parse_crispr_array_features(path, feature_type="repeat_region")
+
+
+def _parse_crispr_array_features(
+    path: str | Path, feature_type: str = "CRISPR"
+) -> Iterator[dict[str, Any]]:
+    """Parse CRISPR array features from a GFF file.
+
+    ``feature_type`` is the GFF type to extract. For CRISPRCasFinder this is
+    ``CRISPR``; for MinCED it is ``repeat_region``. For MinCED, additional
+    filtering ensures the ``rpt_family`` attribute is ``CRISPR``.
+    """
     with open(path) as f:
         for line in f:
             if line.startswith("#") or not line.strip():
@@ -185,19 +208,26 @@ def parse_crispr_cas_finder_gff(path: str | Path) -> Iterator[dict[str, Any]]:
             if len(values) < 9:
                 continue
             try:
-                feature_type = values[2]
-                if feature_type != "CRISPR":
+                current_type = values[2]
+                if current_type != feature_type:
                     continue
+                attributes = values[8].rstrip()
+                if feature_type == "repeat_region":
+                    attr_dict = dict(
+                        pair.split("=", 1) for pair in attributes.split(";") if "=" in pair
+                    )
+                    if attr_dict.get("rpt_family") != "CRISPR":
+                        continue
                 yield {
                     "qname": values[0],
                     "begin": int(values[3]),
                     "end": int(values[4]),
                     "score": float(values[5]) if values[5] not in (".", "") else 0.0,
                     "strand": values[6],
-                    "attributes": values[8].rstrip(),
+                    "attributes": attributes,
                 }
             except (ValueError, IndexError) as exc:
-                logger.debug("skipping erroneous CRISPRCasFinder GFF line: %s (%s)", line.rstrip(), exc)
+                logger.debug("skipping erroneous CRISPR GFF line: %s (%s)", line.rstrip(), exc)
 
 
 def parse_trna_gff(path: str | Path) -> Iterator[dict[str, Any]]:

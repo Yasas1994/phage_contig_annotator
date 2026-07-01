@@ -9,8 +9,11 @@ from Bio.SeqRecord import SeqRecord
 
 from pca.annotations import (
     _compute_gc_metrics,
+    _create_minced_feature,
     _create_trf_feature,
+    _extract_minced_repeat_unit,
     _parse_translation_tables,
+    _stats_table_html,
     _write_static_plot,
 )
 
@@ -92,3 +95,69 @@ def test_create_trf_feature_builds_repeat_feature() -> None:
     assert feature.qualifiers["copies"] == 8.3
     assert feature.qualifiers["consensus"] == "ATATATATATAT"
     assert feature.qualifiers["ID"] == "trf_1"
+
+
+def test_extract_minced_repeat_unit_parses_attributes() -> None:
+    attrs = "ID=CRISPR1;rpt_type=direct;rpt_family=CRISPR;rpt_unit_seq=GTTCC"
+    assert _extract_minced_repeat_unit(attrs) == "GTTCC"
+    assert _extract_minced_repeat_unit("ID=CRISPR1;rpt_family=CRISPR") == ""
+
+
+def test_create_minced_feature_builds_crispr_feature() -> None:
+    row = pd.Series(
+        {
+            "begin": 100,
+            "end": 200,
+            "score": 5.0,
+            "strand": "+",
+            "minced_no": 1,
+            "rpt_unit_seq": "GTTCC",
+        }
+    )
+    feature = _create_minced_feature(row)
+    assert feature.type == "repeat_region"
+    assert int(feature.location.start) == 100
+    assert int(feature.location.end) == 200
+    assert feature.location.strand == 1
+    assert feature.qualifiers["category"] == "CRISPR array"
+    assert feature.qualifiers["n_repeats"] == 5.0
+    assert feature.qualifiers["rpt_unit_seq"] == "GTTCC"
+    assert feature.qualifiers["ID"] == "minced_crispr_1"
+
+
+def test_create_minced_feature_uses_zero_strand_for_unknown() -> None:
+    row = pd.Series(
+        {
+            "begin": 100,
+            "end": 200,
+            "score": 5.0,
+            "strand": ".",
+            "minced_no": 1,
+            "rpt_unit_seq": "",
+        }
+    )
+    feature = _create_minced_feature(row)
+    assert feature.location.strand == 0
+    assert feature.qualifiers["rpt_unit_seq"] == ""
+
+
+def test_stats_table_html_renders_non_empty_stats() -> None:
+    stats = {
+        "length": 5000,
+        "n_genes": 10,
+        "copies_final": 3,
+        "multicopy_confidence": "high",
+        "multicopy_flag": "agreement",
+    }
+    html = _stats_table_html(stats)
+    assert "Genome statistics" in html
+    assert "5,000 bp" in html
+    assert "10" in html
+    assert "3" in html
+    assert "high" in html
+    assert "agreement" in html
+
+
+def test_stats_table_html_returns_empty_notice_for_none() -> None:
+    html = _stats_table_html(None)
+    assert "No genome statistics available" in html

@@ -5,14 +5,17 @@ The workflow expects ``config.yaml`` in the working directory with at least:
 - ``input``: path to input FASTA (contigs or proteins)
 - ``input_type``: ``"contigs"`` or ``"proteins"``
 - ``output_dir``: top-level output directory
-- ``db_dir``: directory containing HMM database splits
-- ``meta_path``: path to PHROG metadata TSV
+- ``db_dir``: root directory containing database subdirectories
+- ``primary_db``: name of the primary database to use (default: ``phrogs``)
+- ``meta_path``: path to PHROG metadata TSV (optional; auto-discovered if omitted)
 - ``run_trna``: whether to run tRNAscan-SE (default: true)
 - ``run_trf``: whether to run Tandem Repeats Finder (default: true)
+- ``run_minced``: whether to run MinCED (default: false)
+- ``run_multicopy``: whether to run multi-copy detection (default: true)
 - ``plot_formats``: list of plot formats, e.g. ``["pdf"]`` or ``["pdf", "html"]``
 """
 
-from pathlib import Path
+from pca.databases import discover_databases
 
 input_path = Path(config["input"])
 output_dir = Path(config["output_dir"])
@@ -21,7 +24,25 @@ gene_caller = config.get("gene_caller", "pyrodigal-gv")
 run_trna = config.get("run_trna", True)
 run_trf = config.get("run_trf", True) and input_type == "contigs"
 db_dir = Path(config["db_dir"])
-meta_path = Path(config["meta_path"])
+primary_db_name = config.get("primary_db", "phrogs")
+
+# Discover the primary database bundle.  ``hmms_path`` is the directory used
+# by pyhmmer, and ``metadata_path`` is the PHROG metadata used for category
+# coloring.
+_discovered = discover_databases(str(db_dir))
+if primary_db_name not in _discovered:
+    raise ValueError(
+        f"Primary database '{primary_db_name}' not found under {db_dir}. "
+        f"Available databases: {', '.join(sorted(_discovered))}"
+    )
+_primary_bundle = _discovered[primary_db_name]
+if not _primary_bundle.has_hmms:
+    raise ValueError(
+        f"Primary database '{primary_db_name}' has no HMM profiles in {_primary_bundle.hmms_path}"
+    )
+
+hmm_db_dir = _primary_bundle.hmms_path
+meta_path = Path(config.get("meta_path", str(_primary_bundle.metadata_path)))
 plot_formats = config.get("plot_formats", ["pdf"])
 translation_table = config.get("translation_table", None)
 theme = config.get("theme", "light")
@@ -41,6 +62,9 @@ defensefinder_genes_tsv = defensefinder_dir / "defense_finder_genes.tsv"
 
 crisprcasfinder_dir = output_dir / "crisprcasfinder"
 crisprcasfinder_gff = crisprcasfinder_dir / "crisprcasfinder.gff"
+
+minced_dir = output_dir / "minced"
+minced_gff = minced_dir / "minced.gff"
 
 
 proteins_faa = output_dir / "genes" / "proteins.faa"
@@ -69,6 +93,11 @@ stats_tsv = stats_dir / "stats.tsv"
 
 
 run_crisprcasfinder = config.get("run_crisprcasfinder", False)
+run_minced = config.get("run_minced", False)
+run_multicopy = config.get("run_multicopy", True)
+
+multicopy_dir = output_dir / "multicopy"
+multicopy_tsv = multicopy_dir / "multicopy.tsv"
 
 
 def _extra_db_path(db):
@@ -90,6 +119,8 @@ rule all:
         plots=plot_done_files,
         stats=stats_tsv if input_type == "contigs" else [],
         crisprcasfinder=crisprcasfinder_dir if run_crisprcasfinder else [],
+        minced=minced_dir if run_minced else [],
+        multicopy=multicopy_dir if run_multicopy else [],
 
 
 if input_type == "contigs":
@@ -249,7 +280,7 @@ rule hmmsearch:
         csv=hmmsearch_csv,
     threads: workflow.cores
     params:
-        db_dir=db_dir,
+        db_dir=hmm_db_dir,
     run:
         from pca.pipeline import search_hmms_pyhmmer
 
@@ -331,6 +362,8 @@ rule annotate:
         meta=meta_path,
         extra_csvs=expand(str(extra_dir / "{db}.csv"), db=hmm_extra_dbs) if hmm_extra_dbs else [],
         defensefinder_tsv=str(defensefinder_genes_tsv) if run_defensefinder else [],
+        minced_gff=str(minced_gff) if run_minced else [],
+        stats=stats_tsv if input_type == "contigs" else [],
     output:
         gff=annotations_gff,
         gbk=annotations_gbk,
@@ -344,9 +377,9 @@ rule annotate:
             db: str(extra_dir / f"{db}.csv")
             for db in hmm_extra_dbs
         }
-        defensefinder_input = None
-        if run_defensefinder and input.defensefinder_tsv:
-            defensefinder_input = input.defensefinder_tsv[0]
+        defensefinder_input = input.defensefinder_tsv if isinstance(input.defensefinder_tsv, str) else None
+        minced_input = input.minced_gff if isinstance(input.minced_gff, str) else None
+        stats_input = input.stats if isinstance(input.stats, str) else None
 
         generate_plots_and_annotations(
             tmp_dir=output_dir,
@@ -361,16 +394,20 @@ rule annotate:
             theme=theme,
             extra_hits=extra_hits or None,
             defensefinder_tsv=defensefinder_input,
+            minced_gff=minced_input,
+            stats_tsv=stats_input,
         )
 
 
 rule genome_stats:
-    """Compute per-contig genomic statistics (strand switching, TRF repeats)."""
+    """Compute per-contig genomic statistics (strand switching, repeats, CRISPR arrays, copy number)."""
     input:
         fna=input_path,
         gff=proteins_gff,
         trf=trf_dat,
         crispr=crisprcasfinder_gff if run_crisprcasfinder else [],
+        minced=minced_gff if run_minced else [],
+        multicopy=multicopy_tsv if run_multicopy else [],
     output:
         tsv=stats_tsv,
     run:
@@ -381,6 +418,8 @@ rule genome_stats:
             input.gff,
             trf_path=input.trf if run_trf else None,
             crispr_path=input.crispr if run_crisprcasfinder else None,
+            minced_path=input.minced if run_minced else None,
+            multicopy_path=input.multicopy if run_multicopy else None,
         )
         stats_dir.mkdir(parents=True, exist_ok=True)
         df.to_csv(output.tsv, sep="\t", index=False)
@@ -404,3 +443,38 @@ if run_crisprcasfinder:
                 in_=str(input.fna),
                 threads=threads,
             )
+
+
+if run_minced:
+
+    rule minced:
+        """Detect CRISPR arrays with MinCED."""
+        input:
+            fna=input_path,
+        output:
+            outdir=directory(minced_dir),
+            gff=minced_gff,
+        run:
+            from pca.externals import run_minced
+
+            run_minced(
+                out=str(minced_dir / "minced"),
+                in_=str(input.fna),
+            )
+
+
+if run_multicopy:
+
+    rule multicopy:
+        """Detect multi-copy viral contigs using k-mer frequency and FFT."""
+        input:
+            fna=input_path,
+        output:
+            outdir=directory(multicopy_dir),
+            tsv=multicopy_tsv,
+        run:
+            from pca.multicopy import detect_multicopy
+
+            multicopy_dir.mkdir(parents=True, exist_ok=True)
+            df = detect_multicopy(str(input.fna))
+            df.to_csv(str(output.tsv), sep="\t", index=False)

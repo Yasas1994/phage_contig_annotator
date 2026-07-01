@@ -512,6 +512,115 @@ class TestAnnotations:
         assert (out_dir / "annotations" / "annotations.gbk").is_file()
         assert (out_dir / "plots" / "contig1.html").is_file()
 
+    def test_generate_plots_and_annotations_with_minced_crispr_arrays(
+        self, tmp_path: Path
+    ) -> None:
+        from Bio import SeqIO
+        from pca.annotations import generate_plots_and_annotations
+
+        fna = tmp_path / "input.fna"
+        fna.write_text(">contig1\n" + "ATG" * 300 + "TAA\n")
+
+        proteins_gff = tmp_path / "proteins.gff"
+        proteins_gff.write_text(
+            "##gff-version 3\n"
+            "##sequence-region contig1 1 903\n"
+            "contig1\tpyrodigal\tCDS\t1\t903\t100.0\t+\t0\tID=contig1_1\n"
+        )
+
+        hmmsearch_txt = tmp_path / "hmmsearch.txt"
+        hmmsearch_txt.write_text(
+            "contig1_1\t-\tphrog_1\t-\t1e-10\t100.0\t0.0\t1e-5\t50.0\t0.0\n"
+        )
+
+        meta = tmp_path / "meta.csv"
+        meta.write_text("#phrog,Annotation,Category,color\nphrog_1,test,unknown function,#c9c9c9\n")
+
+        trna_gff = tmp_path / "trna.gff"
+        trna_gff.write_text("##gff-version 3\n")
+
+        minced_gff = tmp_path / "minced.gff"
+        minced_gff.write_text(
+            "##gff-version 3\n"
+            "contig1\tminced:0.4.2\trepeat_region\t100\t200\t5\t.\t.\tID=CRISPR1;rpt_family=CRISPR;rpt_unit_seq=GTTCC\n"
+        )
+
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+
+        generate_plots_and_annotations(
+            tmp_dir=out_dir,
+            hmmsearch_dir=hmmsearch_txt,
+            trna_dir=trna_gff,
+            meta_dir=meta,
+            gff_dir=proteins_gff,
+            input_fasta=fna,
+            minced_gff=minced_gff,
+        )
+
+        gbk_records = list(SeqIO.parse(out_dir / "annotations" / "annotations.gbk", "genbank"))
+        assert len(gbk_records) == 1
+        record = gbk_records[0]
+        crispr_features = [f for f in record.features if f.type == "repeat_region"]
+        assert len(crispr_features) == 1
+        assert crispr_features[0].qualifiers["category"] == ["CRISPR array"]
+        assert crispr_features[0].qualifiers["n_repeats"] == ["5.0"]
+        assert crispr_features[0].qualifiers["rpt_unit_seq"] == ["GTTCC"]
+
+    def test_generate_plots_and_annotations_with_stats_tsv_renders_stats_table(
+        self, tmp_path: Path
+    ) -> None:
+        from pca.annotations import generate_plots_and_annotations
+
+        fna = tmp_path / "input.fna"
+        fna.write_text(">contig1\n" + "ATG" * 300 + "TAA\n")
+
+        proteins_gff = tmp_path / "proteins.gff"
+        proteins_gff.write_text(
+            "##gff-version 3\n"
+            "##sequence-region contig1 1 903\n"
+            "contig1\tpyrodigal\tCDS\t1\t903\t100.0\t+\t0\tID=contig1_1\n"
+        )
+
+        hmmsearch_txt = tmp_path / "hmmsearch.txt"
+        hmmsearch_txt.write_text(
+            "contig1_1\t-\tphrog_1\t-\t1e-10\t100.0\t0.0\t1e-5\t50.0\t0.0\n"
+        )
+
+        meta = tmp_path / "meta.csv"
+        meta.write_text("#phrog,Annotation,Category,color\nphrog_1,test,unknown function,#c9c9c9\n")
+
+        trna_gff = tmp_path / "trna.gff"
+        trna_gff.write_text("##gff-version 3\n")
+
+        stats_tsv = tmp_path / "stats.tsv"
+        stats_tsv.write_text(
+            "contig_id\tlength\tn_genes\tmean_kmer_freq\tcopies_final\tgenome_unit_bp\tmulticopy_confidence\tmulticopy_flag\n"
+            "contig1\t903\t1\t2.5\t3\t300\thigh\tagreement\n"
+        )
+
+        out_dir = tmp_path / "out"
+        out_dir.mkdir()
+
+        generate_plots_and_annotations(
+            tmp_dir=out_dir,
+            hmmsearch_dir=hmmsearch_txt,
+            trna_dir=trna_gff,
+            meta_dir=meta,
+            gff_dir=proteins_gff,
+            input_fasta=fna,
+            plot_formats=["html"],
+            stats_tsv=stats_tsv,
+        )
+
+        html_path = out_dir / "plots" / "contig1.html"
+        assert html_path.is_file()
+        content = html_path.read_text()
+        assert "Genome statistics" in content
+        assert "903 bp" in content
+        assert "3" in content
+        assert "agreement" in content
+
     def test_convert_to_html_from_genbank(self, tmp_path: Path) -> None:
         from Bio import SeqIO
         from Bio.Seq import Seq

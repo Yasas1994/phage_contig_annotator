@@ -53,6 +53,25 @@ bash install.sh
    phage_contig_annotator download-db
    ```
 
+   The database is organized hierarchically under `databases/`:
+
+   ```
+   databases/
+   ├── phrogs/                    # primary PHROG database
+   │   ├── hmms/                  # HMM profiles (.hmm)
+   │   ├── metadata/              # PHROG metadata (.csv)
+   │   ├── diamond/               # optional DIAMOND database
+   │   └── mmseqs/                # optional MMseqs database
+   └── db_chkpt
+   ```
+
+   Additional databases can be added as sibling directories (e.g. `databases/apis/`).
+   If you have an existing flat database layout, reorganize it with:
+
+   ```bash
+   phage_contig_annotator utils reorganize-db
+   ```
+
 ## Optional tools
 
 The pipeline can run two optional external tools. They are installed by

@@ -189,6 +189,26 @@ class TestContigStatsFromGff:
         assert stats["n_crispr_arrays"] == 0
         assert stats["total_crispr_array_length"] == 0
 
+    def test_crispr_stats_from_minced_gff(self, tmp_path: Path) -> None:
+        gff = tmp_path / "minced.gff"
+        gff.write_text(
+            "##gff-version 3\n"
+            "contig1\tminced:0.4.2\trepeat_region\t10\t30\t5\t.\t.\tID=CRISPR1;rpt_family=CRISPR\n"
+            "contig1\tminced:0.4.2\trepeat_region\t50\t70\t4\t.\t.\tID=CRISPR2;rpt_family=CRISPR\n"
+            "contig2\tminced:0.4.2\trepeat_region\t5\t25\t3\t.\t.\tID=CRISPR3;rpt_family=CRISPR\n"
+        )
+        stats = genome_stats.crispr_stats(gff, "contig1")
+        assert stats["n_crispr_arrays"] == 2
+        assert stats["total_crispr_array_length"] == 42
+
+    def test_crispr_stats_ignores_non_crispr_minced_features(self, tmp_path: Path) -> None:
+        gff = tmp_path / "minced.gff"
+        gff.write_text(
+            "##gff-version 3\n"
+            "contig1\tminced:0.4.2\trepeat_region\t10\t30\t.\t.\t.\tID=other;rpt_family=other\n"
+        )
+        stats = genome_stats.crispr_stats(gff, "contig1")
+        assert stats["n_crispr_arrays"] == 0
 
 class TestComputeGenomeStats:
     def test_basic(self, tmp_path: Path) -> None:
@@ -240,3 +260,104 @@ class TestComputeGenomeStatsWithCrispr:
         assert len(df) == 1
         assert df.iloc[0]["n_crispr_arrays"] == 1
         assert df.iloc[0]["total_crispr_array_length"] == 5
+
+
+class TestComputeGenomeStatsWithMinced:
+    def test_basic(self, tmp_path: Path) -> None:
+        fasta = tmp_path / "input.fna"
+        fasta.write_text(
+            ">contig1\nACGTACGTACGTACGTACGT\n>contig2\nAAAA\n"
+        )
+        gff = tmp_path / "genes.gff"
+        record = SeqRecord(seq=Seq("ACGTACGTACGTACGTACGT"), id="contig1")
+        record.features = [
+            SeqFeature(FeatureLocation(10, 20, strand=1), type="CDS"),
+            SeqFeature(FeatureLocation(25, 35, strand=-1), type="CDS"),
+        ]
+        with open(gff, "w") as fh:
+            from BCBio import GFF
+
+            GFF.write([record], fh)
+
+        minced_gff = tmp_path / "minced.gff"
+        minced_gff.write_text(
+            "contig1\tminced:0.4.2\trepeat_region\t1\t5\t3\t.\t.\tID=CRISPR1;rpt_family=CRISPR\n"
+        )
+
+        df = genome_stats.compute_genome_stats(fasta, gff, minced_path=minced_gff)
+        assert len(df) == 1
+        assert df.iloc[0]["n_crispr_arrays"] == 1
+        assert df.iloc[0]["total_crispr_array_length"] == 5
+
+    def test_combined_with_crisprcasfinder(self, tmp_path: Path) -> None:
+        fasta = tmp_path / "input.fna"
+        fasta.write_text(">contig1\nACGTACGTACGTACGTACGT\n")
+        gff = tmp_path / "genes.gff"
+        record = SeqRecord(seq=Seq("ACGTACGTACGTACGTACGT"), id="contig1")
+        record.features = [SeqFeature(FeatureLocation(10, 20, strand=1), type="CDS")]
+        with open(gff, "w") as fh:
+            from BCBio import GFF
+            GFF.write([record], fh)
+
+        crispr_gff = tmp_path / "crispr.gff"
+        crispr_gff.write_text(
+            "contig1\tCRISPRCasFinder\tCRISPR\t1\t5\t.\t+\t.\tID=CRISPR1\n"
+        )
+        minced_gff = tmp_path / "minced.gff"
+        minced_gff.write_text(
+            "contig1\tminced:0.4.2\trepeat_region\t10\t20\t3\t.\t.\tID=CRISPR2;rpt_family=CRISPR\n"
+        )
+
+        df = genome_stats.compute_genome_stats(
+            fasta, gff, crispr_path=crispr_gff, minced_path=minced_gff
+        )
+        assert len(df) == 1
+        assert df.iloc[0]["n_crispr_arrays"] == 2
+        assert df.iloc[0]["total_crispr_array_length"] == 16
+
+
+class TestComputeGenomeStatsWithMulticopy:
+    def test_merges_multicopy_tsv(self, tmp_path: Path) -> None:
+        fasta = tmp_path / "input.fna"
+        fasta.write_text(
+            ">contig1\nACGTACGTACGTACGTACGT\n>contig2\nAAAA\n"
+        )
+        gff = tmp_path / "genes.gff"
+        record = SeqRecord(seq=Seq("ACGTACGTACGTACGTACGT"), id="contig1")
+        record.features = [
+            SeqFeature(FeatureLocation(10, 20, strand=1), type="CDS"),
+        ]
+        with open(gff, "w") as fh:
+            from BCBio import GFF
+            GFF.write([record], fh)
+
+        multicopy_tsv = tmp_path / "multicopy.tsv"
+        multicopy_tsv.write_text(
+            "contig_id\tcontig_len\tmean_kmer_freq\tcopies_kmer\tfft_period_bp\tfft_snr\tcopies_fft\tcopies_final\tgenome_unit_bp\tconfidence\tflag\n"
+            "contig1\t20\t2.5\t3\t500\t4.0\t2\t3\t500\tmedium\tagreement\n"
+        )
+
+        df = genome_stats.compute_genome_stats(
+            fasta, gff, multicopy_path=multicopy_tsv
+        )
+        assert len(df) == 1
+        assert df.iloc[0]["copies_final"] == 3
+        assert df.iloc[0]["multicopy_confidence"] == "medium"
+        assert df.iloc[0]["multicopy_flag"] == "agreement"
+        assert df.iloc[0]["genome_unit_bp"] == 500
+
+    def test_missing_multicopy_tsv_is_ignored(self, tmp_path: Path) -> None:
+        fasta = tmp_path / "input.fna"
+        fasta.write_text(">contig1\nACGTACGTACGTACGTACGT\n")
+        gff = tmp_path / "genes.gff"
+        record = SeqRecord(seq=Seq("ACGTACGTACGTACGTACGT"), id="contig1")
+        record.features = [SeqFeature(FeatureLocation(10, 20, strand=1), type="CDS")]
+        with open(gff, "w") as fh:
+            from BCBio import GFF
+            GFF.write([record], fh)
+
+        df = genome_stats.compute_genome_stats(
+            fasta, gff, multicopy_path=tmp_path / "nonexistent.tsv"
+        )
+        assert len(df) == 1
+        assert "copies_final" not in df.columns

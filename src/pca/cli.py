@@ -15,7 +15,7 @@ import click
 import requests
 import tqdm
 
-from pca import annotations, genome_stats, validation
+from pca import annotations, databases, genome_stats, validation
 from pca.io import convert_to_fasta
 from pca.logutils import get_logger
 
@@ -70,63 +70,6 @@ def _write_config(config: configparser.ConfigParser) -> None:
     config_path = _package_dir() / "data" / "config.ini"
     with open(config_path, "w") as configfile:
         config.write(configfile)
-
-
-def _tsv_to_phrog_csv(tsv_path: Path, csv_path: Path) -> None:
-    """Convert the legacy PHROG metadata TSV to the new CSV format.
-
-    The new CSV keeps the same four core columns but uses CSV quoting, which
-    is required for category names that contain commas (e.g. "DNA, RNA and
-    nucleotide metabolism").
-    """
-    import pandas as pd
-
-    df = pd.read_csv(tsv_path, sep="\t")
-    df = df.rename(
-        columns={"phrog": "#phrog", "annot": "Annotation", "category": "Category"}
-    )
-    # The legacy TSV stores a numeric phrog id; the CSV stores the prefixed
-    # identifier used by the search results.
-    df["#phrog"] = df["#phrog"].apply(lambda x: f"phrog_{x}")
-    df.to_csv(csv_path, index=False)
-
-
-def _discover_databases(db_dir: str) -> tuple[dict[str, str], str | None]:
-    """Return discovered HMM databases and the PHROG metadata path.
-
-    Supports both the expected packaged layout (``hmmerdb*`` directories and a
-    ``meta`` directory containing ``PHROG_annot_v4.csv``) and flat layouts
-    produced by older extraction code.
-    """
-    db_path = Path(db_dir)
-    hmmerdb: dict[str, str] = {}
-    meta_path: str | None = None
-
-    # Prefer the extended PHROG metadata CSV; fall back to the legacy TSV.
-    meta_candidates = list(db_path.rglob("PHROG_annot_v4.csv"))
-    if not meta_candidates:
-        meta_candidates = list(db_path.rglob("phrog_annot_v4.tsv"))
-    if meta_candidates:
-        meta_path = str(meta_candidates[0])
-
-    # Locate HMM files and group them by their parent directory.
-    hmm_paths = list(db_path.rglob("*.hmm"))
-    if not hmm_paths:
-        return hmmerdb, meta_path
-
-    for hmm_file in hmm_paths:
-        parent = hmm_file.parent
-        parent_name = parent.name
-        # Prefer directories that look like the packaged hmmerdb splits.
-        if "hmmerdb" in parent_name:
-            db_name = parent_name.split("_")[0]
-        elif parent == db_path:
-            db_name = "hmmerdb"
-        else:
-            db_name = parent.stem
-        hmmerdb[db_name] = str(parent)
-
-    return hmmerdb, meta_path
 
 
 def _snakefile_path() -> Path:
@@ -184,7 +127,7 @@ def download_dbs(path: str) -> bool:
             member.name = str(member_path)
         tar.extractall(path=path)
 
-    _normalize_database_dir(path)
+    databases.normalize_database_dir(path)
 
     tar_file_path.unlink()
     click.echo(f"Database downloaded and extracted to {path}")
@@ -192,57 +135,40 @@ def download_dbs(path: str) -> bool:
     return True
 
 
-def _normalize_database_dir(path: str) -> None:
-    """Organize extracted database files into a predictable layout.
+def _primary_database(
+    db_dir: Path, primary_name: str = "phrogs"
+) -> databases.DatabaseBundle:
+    """Discover databases and return the primary bundle.
 
-    Moves loose ``.hmm`` files into a ``hmmerdb/`` directory and the PHROG
-    metadata CSV into a ``meta/`` directory when they are not already there.
+    Raises a click.UsageError when the primary database is missing or lacks
+    HMMs/metadata.
     """
-    db_path = Path(path)
-    hmmerdb_dir = db_path / "hmmerdb"
-    meta_dir = db_path / "meta"
+    discovered = databases.discover_databases(str(db_dir))
+    if not discovered:
+        raise click.UsageError(
+            f"No databases found in {db_dir}. "
+            "Run 'phage_contig_annotator download-db' first."
+        )
 
-    # Gather loose .hmm files (those not already under a hmmerdb* directory).
-    loose_hmms = [
-        p for p in db_path.rglob("*.hmm")
-        if "hmmerdb" not in p.parent.name
-    ]
-    if loose_hmms:
-        hmmerdb_dir.mkdir(exist_ok=True)
-        for hmm_file in loose_hmms:
-            dest = hmmerdb_dir / hmm_file.name
-            if dest != hmm_file:
-                hmm_file.rename(dest)
+    primary = discovered.get(primary_name)
+    if primary is None:
+        available = ", ".join(sorted(discovered))
+        raise click.UsageError(
+            f"Primary database '{primary_name}' not found in {db_dir}. "
+            f"Available databases: {available}"
+        )
 
-    # Gather loose metadata CSVs.
-    csv_files = [p for p in db_path.rglob("PHROG_annot_v4.csv") if p.parent != meta_dir]
-    if csv_files:
-        meta_dir.mkdir(exist_ok=True)
-        for meta_file in csv_files:
-            dest = meta_dir / meta_file.name
-            if dest != meta_file:
-                meta_file.rename(dest)
+    if not primary.has_hmms:
+        raise click.UsageError(
+            f"Primary database '{primary_name}' has no HMM profiles in "
+            f"{primary.hmms_path}"
+        )
+    if not primary.has_metadata:
+        raise click.UsageError(
+            f"Primary database '{primary_name}' has no metadata file."
+        )
 
-    # Convert any loose legacy TSVs to the new CSV format when no CSV is present.
-    tsv_files = [
-        p for p in db_path.rglob("phrog_annot_v4.tsv")
-        if p.parent != meta_dir and not (meta_dir / "PHROG_annot_v4.csv").exists()
-    ]
-    if tsv_files:
-        meta_dir.mkdir(exist_ok=True)
-        for tsv_file in tsv_files:
-            csv_dest = meta_dir / "PHROG_annot_v4.csv"
-            _tsv_to_phrog_csv(tsv_file, csv_dest)
-            if tsv_file.parent == db_path:
-                tsv_file.unlink()
-
-    # Remove empty directories left behind after moving files.
-    for subdir in sorted(db_path.iterdir(), reverse=True):
-        if subdir.is_dir() and subdir not in (hmmerdb_dir, meta_dir):
-            try:
-                subdir.rmdir()
-            except OSError:
-                pass
+    return primary
 
 
 @click.group(invoke_without_command=True)
@@ -341,6 +267,16 @@ def main(ctx: click.Context, quiet: bool) -> None:
     help="Run CRISPRCasFinder to detect CRISPR arrays and Cas genes.",
 )
 @click.option(
+    "--run-minced",
+    is_flag=True,
+    help="Run MinCED to detect CRISPR arrays.",
+)
+@click.option(
+    "--skip-multicopy",
+    is_flag=True,
+    help="Skip multi-copy detection on contigs (it runs by default).",
+)
+@click.option(
     "--cpus",
     default=8,
     show_default=True,
@@ -396,6 +332,8 @@ def run(
     extra_evalue: float,
     run_defensefinder: bool,
     run_crisprcasfinder: bool,
+    run_minced: bool,
+    skip_multicopy: bool,
     cpus: int,
     plot_formats: tuple[str, ...],
     translation_table: int | None,
@@ -408,20 +346,13 @@ def run(
 
     config = _load_config()
     db_dir = db_dir or Path(config["databases"]["dbroot"] or _DEFAULT_DB_DIR)
+    primary_name = config["databases"].get("primary", "phrogs")
+    if not primary_name:
+        primary_name = "phrogs"
     if not db_dir.is_dir():
         raise click.UsageError(f"Database directory does not exist: {db_dir}")
 
-    hmmerdb, meta_path = _discover_databases(str(db_dir))
-    if not hmmerdb:
-        raise click.UsageError(
-            f"No HMM databases found in {db_dir}. "
-            "Run 'phage_contig_annotator download-db' first."
-        )
-    if meta_path is None:
-        raise click.UsageError(
-            f"PHROG metadata not found in {db_dir}. "
-            "Run 'phage_contig_annotator download-db' first."
-        )
+    primary = _primary_database(db_dir, primary_name=primary_name)
 
     if not skip_trna:
         validation.check_executables(["tRNAscan-SE"])
@@ -434,6 +365,12 @@ def run(
             raise click.UsageError(
                 "CRISPRCasFinder was requested but CRISPRCasFinder.pl is not on PATH."
             )
+    if run_minced:
+        if not shutil.which("minced"):
+            raise click.UsageError("MinCED was requested but minced is not on PATH.")
+
+    if not skip_multicopy and input_type != "contigs":
+        raise click.UsageError("Multi-copy detection is only supported for contig inputs.")
 
     gene_caller = gene_caller.lower()
     if input_type == "contigs" and gene_caller == "phanotate":
@@ -481,7 +418,8 @@ def run(
         "gene_caller": gene_caller,
         "output_dir": str(output_dir.resolve()),
         "db_dir": str(db_dir.resolve()),
-        "meta_path": str(Path(meta_path).resolve()),
+        "primary_db": primary.name,
+        "meta_path": str(primary.metadata_path.resolve()),
         "run_trna": not skip_trna,
         "run_trf": run_trf,
         "plot_formats": list(plot_formats),
@@ -492,6 +430,8 @@ def run(
         "extra_evalue": extra_evalue,
         "run_defensefinder": run_defensefinder,
         "run_crisprcasfinder": run_crisprcasfinder,
+        "run_minced": run_minced,
+        "run_multicopy": not skip_multicopy,
     }
 
     config_path = output_dir / "config.yaml"
@@ -551,8 +491,7 @@ def download_db(ctx: click.Context, path: Path | None) -> None:
 
     config = _load_config()
     config.set("databases", "dbroot", str(path))
-    config.set("databases", "hmmdb", str(path / "hmmdb"))
-    config.set("databases", "meta", str(path / "meta"))
+    config.set("databases", "primary", "phrogs")
     _write_config(config)
     click.echo(f"Updated config.ini with database path: {path}")
 
@@ -602,6 +541,13 @@ def utils(ctx: click.Context) -> None:
     type=click.Choice(["light", "dark"], case_sensitive=False),
     help="Color theme for the HTML report.",
 )
+@click.option(
+    "--stats",
+    "stats_tsv",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
+    help="Optional per-contig statistics TSV to display in the HTML report.",
+)
 @click.pass_context
 def utils_report(
     ctx: click.Context,
@@ -610,6 +556,7 @@ def utils_report(
     fasta_path: Path | None,
     meta_path: Path | None,
     theme: str,
+    stats_tsv: Path | None,
 ) -> None:
     """Convert a GenBank or GFF file to an interactive HTML report."""
     logger = get_logger(quiet=ctx.obj["quiet"])
@@ -620,6 +567,7 @@ def utils_report(
             fasta_path=fasta_path,
             meta_path=meta_path,
             theme=theme,
+            stats_tsv=stats_tsv,
         )
     except Exception as exc:
         raise click.ClickException(str(exc)) from exc
@@ -660,6 +608,17 @@ def utils_report(
     help="Run TRF with flags '-f -d -m' if no --trf file is provided.",
 )
 @click.option(
+    "--skip-multicopy",
+    is_flag=True,
+    help="Skip multi-copy detection on the input FASTA (it runs by default).",
+)
+@click.option(
+    "--multicopy-tsv",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=Path),
+    help="Optional pre-computed multi-copy detection TSV to merge into the stats table.",
+)
+@click.option(
     "-o",
     "--output",
     "output_path",
@@ -674,9 +633,11 @@ def utils_stats(
     gff_path: Path,
     trf_path: Path | None,
     run_trf: bool,
+    skip_multicopy: bool,
+    multicopy_tsv: Path | None,
     output_path: Path | None,
 ) -> None:
-    """Compute per-contig genomic statistics (strand switching, TRF repeats)."""
+    """Compute per-contig genomic statistics (strand switching, repeats, copy number)."""
     logger = get_logger(quiet=ctx.obj["quiet"])
 
     trf_dat = trf_path
@@ -690,11 +651,23 @@ def utils_stats(
             raise click.ClickException("TRF failed; cannot compute tandem-repeat stats.")
         trf_dat = Path(f"{trf_prefix}.dat")
 
+    multicopy_path = multicopy_tsv
+    if multicopy_path is None and not skip_multicopy:
+        from pca.multicopy import detect_multicopy
+
+        tmp_dir = Path(output_path).parent if output_path else Path.cwd()
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        multicopy_path = tmp_dir / f"{input_path.stem}_multicopy.tsv"
+        df_mc = detect_multicopy(str(input_path))
+        df_mc.to_csv(multicopy_path, sep="\t", index=False)
+        logger.info("wrote multi-copy detection TSV to %s", multicopy_path)
+
     try:
         df = genome_stats.compute_genome_stats(
             input_path,
             gff_path,
             trf_path=trf_dat,
+            multicopy_path=multicopy_path,
         )
     except Exception as exc:
         raise click.ClickException(str(exc)) from exc
@@ -705,6 +678,60 @@ def utils_stats(
         df.to_csv(output_path, sep="\t", index=False)
         click.echo(f"Wrote {output_path}")
     logger.info("computed stats for %d contig(s)", len(df))
+
+
+@utils.command("reorganize-db")
+@click.option(
+    "-p",
+    "--path",
+    "db_dir",
+    default=None,
+    type=click.Path(exists=True, file_okay=False, writable=True, readable=True, path_type=Path),
+    help="Path to the database directory to reorganize (default: bundled databases dir).",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show the planned layout without moving files.",
+)
+@click.pass_context
+def utils_reorganize_db(
+    ctx: click.Context,
+    db_dir: Path | None,
+    dry_run: bool,
+) -> None:
+    """Reorganize an existing database directory into the hierarchical layout.
+
+    Each top-level subdirectory becomes a database entry, with HMM profiles,
+    metadata, DIAMOND and MMseqs files moved into standard ``hmms/``,
+    ``metadata/``, ``diamond/`` and ``mmseqs/`` subdirectories.
+    """
+    logger = get_logger(quiet=ctx.obj["quiet"])
+    db_dir = db_dir or _DEFAULT_DB_DIR
+
+    before = databases.discover_databases(str(db_dir))
+    if not before:
+        raise click.ClickException(f"No databases found in {db_dir}.")
+
+    if dry_run:
+        click.echo(f"Planned layout for {db_dir}:")
+        for name, bundle in sorted(before.items()):
+            click.echo(f"  {name}/")
+            if bundle.hmms_path is not None:
+                click.echo(f"    hmms/ -> {bundle.hmms_path}")
+            if bundle.metadata_path is not None:
+                click.echo(f"    metadata/ -> {bundle.metadata_path}")
+            if bundle.diamond_path is not None:
+                click.echo(f"    diamond/ -> {bundle.diamond_path}")
+            if bundle.mmseqs_path is not None:
+                click.echo(f"    mmseqs/ -> {bundle.mmseqs_path}")
+        return
+
+    reorganized = databases.normalize_database_dir(str(db_dir))
+    click.echo(f"Reorganized database directory: {db_dir}")
+    for name, bundle in sorted(reorganized.items()):
+        click.echo(f"  {name}: hmms={bundle.hmms_path}, metadata={bundle.metadata_path}")
+    logger.info("reorganized database directory %s", db_dir)
 
 
 

@@ -28,7 +28,7 @@ from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 from matplotlib.transforms import Bbox
 
-from pca.parsers import parse_hmmsearch, parse_trf_dat, parse_trna_gff
+from pca.parsers import parse_hmmsearch, parse_minced_gff, parse_trf_dat, parse_trna_gff
 
 __all__ = [
     "convert_to_html",
@@ -67,6 +67,7 @@ _DEFAULT_CATEGORY_COLORS: dict[str, str] = {
     _NO_PHROG_MATCH_CATEGORY: "#a0a0a0",
     "tRNA": "#e377c2",
     "tandem repeat": "#17becf",
+    "CRISPR array": "#bcbd22",
     # Optional extra database categories
     "antimicrobial resistance": "#d62728",
     "virulence factor": "#e377c2",
@@ -148,6 +149,38 @@ def _create_trf_feature(x: pd.Series) -> SeqFeature:
         FeatureLocation(int(x["begin"]), int(x["end"]), strand=0),
         type="tandem_repeat",
         id=str(x["trf_no"]),
+        qualifiers=qualifiers,
+    )
+
+
+def _extract_minced_repeat_unit(attributes: str) -> str:
+    """Return the repeat unit sequence from a MinCED attributes string."""
+    for pair in attributes.split(";"):
+        if "=" in pair:
+            key, value = pair.split("=", 1)
+            if key.strip() == "rpt_unit_seq":
+                return value.strip()
+    return ""
+
+
+def _create_minced_feature(x: pd.Series) -> SeqFeature:
+    """Create a Biopython SeqFeature from a normalized MinCED CRISPR array row."""
+    strand_map = {"+": 1, "-": -1}
+    strand = strand_map.get(x["strand"], 0)
+    qualifiers = {
+        "source": "MinCED",
+        "score": x["score"],
+        "label": "CRISPR array",
+        "category": "CRISPR array",
+        "color": _DEFAULT_CATEGORY_COLORS["CRISPR array"],
+        "ID": f"minced_crispr_{x['minced_no']}",
+        "n_repeats": x["score"],
+        "rpt_unit_seq": x.get("rpt_unit_seq", ""),
+    }
+    return SeqFeature(
+        FeatureLocation(int(x["begin"]), int(x["end"]), strand=strand),
+        type="repeat_region",
+        id=str(x["minced_no"]),
         qualifiers=qualifiers,
     )
 
@@ -262,6 +295,8 @@ def _feature_to_dict(feature: Any) -> dict[str, Any]:
         "copies": _qualifier_to_str(feature.qualifiers.get("copies")),
         "consensus": _qualifier_to_str(feature.qualifiers.get("consensus")),
         "entropy": _qualifier_to_str(feature.qualifiers.get("entropy")),
+        "n_repeats": _qualifier_to_str(feature.qualifiers.get("n_repeats")),
+        "rpt_unit_seq": _qualifier_to_str(feature.qualifiers.get("rpt_unit_seq")),
     }
     for db_name in _EXTRA_DB_CATEGORIES:
         result[f"{db_name}_hit"] = _qualifier_to_str(feature.qualifiers.get(f"{db_name}_hit"))
@@ -291,6 +326,8 @@ _TABLE_COLUMNS: list[tuple[str, str]] = [
     ("copies", "Copies"),
     ("consensus", "Consensus"),
     ("entropy", "Entropy"),
+    ("n_repeats", "# Repeats"),
+    ("rpt_unit_seq", "Repeat unit"),
     *[(f"{db}_hit", db.upper()) for db in _EXTRA_DB_CATEGORIES],
 ]
 _TABLE_COLUMNS += [
@@ -564,6 +601,50 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
     cursor: pointer;
     color: var(--text);
   }
+  #stats-table { margin-top: 18px; }
+  #stats-table h4 {
+    margin: 0 0 10px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  #stats-table .table-wrap { overflow-x: auto; }
+  #stats-table table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 12px;
+    background: transparent;
+  }
+  #stats-table th {
+    background: var(--table-header-bg);
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--table-header-text);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 0.5px solid var(--border);
+    width: 40%;
+    white-space: nowrap;
+  }
+  #stats-table td {
+    padding: 7px 10px;
+    text-align: left;
+    border-bottom: 0.5px solid var(--border);
+    color: var(--text);
+    vertical-align: top;
+  }
+  #stats-table tr:last-child th,
+  #stats-table tr:last-child td { border-bottom: none; }
+  .stats-empty {
+    padding: 10px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-style: italic;
+  }
   #annotation-table td.expander-col {
     width: 80px;
     min-width: 80px;
@@ -833,6 +914,7 @@ _D3_HTML_TEMPLATE = """<!DOCTYPE html>
 </div>
 <div id="chart"></div>
 <div id="legend"></div>
+<div id="stats-table">__STATS_TABLE_HTML__</div>
 <div id="annotation-table"></div>
 
 <script>
@@ -1578,6 +1660,56 @@ def _compute_gc_metrics(
     return positions, gc_values, skew_values, cumulative_skew
 
 
+def _stats_table_html(stats: dict[str, Any] | None) -> str:
+    """Return a static HTML table for per-contig statistics, or an empty notice."""
+    if not stats:
+        return '<div class="stats-empty">No genome statistics available for this contig.</div>'
+
+    # Keys to display, with human-readable labels.
+    display_rows = [
+        ("Contig length", "length", "{v:,} bp"),
+        ("Genes", "n_genes", "{v}"),
+        ("Strand switch frequency", "strand_switch_frequency", "{v:.4f}"),
+        ("Weighted strand switch frequency", "weighted_strand_switch_frequency", "{v:.4f}"),
+        ("Strand bias index", "strand_bias_index", "{v:.4f}"),
+        ("Tandem repeats", "n_tandem_repeats", "{v:.0f}"),
+        ("Total tandem repeat length", "total_tandem_repeat_length", "{v:.0f}"),
+        ("CRISPR arrays", "n_crispr_arrays", "{v:.0f}"),
+        ("Total CRISPR array length", "total_crispr_array_length", "{v:.0f}"),
+        ("Mean k-mer frequency", "mean_kmer_freq", "{v:.4f}"),
+        ("Copy number (k-mer)", "copies_kmer", "{v:.0f}"),
+        ("FFT period", "fft_period_bp", "{v:.0f} bp"),
+        ("FFT SNR", "fft_snr", "{v:.2f}"),
+        ("Copy number (FFT)", "copies_fft", "{v:.0f}"),
+        ("Final copy number", "copies_final", "{v:.0f}"),
+        ("Genome unit length", "genome_unit_bp", "{v:.0f} bp"),
+        ("Multi-copy confidence", "multicopy_confidence", "{v}"),
+        ("Multi-copy flag", "multicopy_flag", "{v}"),
+    ]
+
+    rows_html = []
+    for label, key, fmt in display_rows:
+        value = stats.get(key)
+        if value is None or value == "":
+            continue
+        try:
+            formatted = fmt.format(v=value)
+        except (ValueError, TypeError):
+            formatted = str(value)
+        rows_html.append(f"<tr><th>{html.escape(label)}</th><td>{html.escape(formatted)}</td></tr>")
+
+    if not rows_html:
+        return '<div class="stats-empty">No genome statistics available for this contig.</div>'
+
+    return (
+        '<h4>Genome statistics</h4>'
+        '<div class="table-wrap">'
+        '<table><tbody>'
+        + "".join(rows_html)
+        + "</tbody></table></div>"
+    )
+
+
 def _write_interactive_plot(
     record: Any,
     plots_dir: Path,
@@ -1587,12 +1719,14 @@ def _write_interactive_plot(
     theme: str = "light",
     out_path: Path | None = None,
     feature_summary: tuple[str, str] | None = None,
+    stats: dict[str, Any] | None = None,
 ) -> None:
     """Write an interactive D3.js HTML genome map for a contig.
 
     Genes are drawn on two tracks: forward strand above and reverse strand
     below. A category color legend and hover tooltips are included. A header
-    card with contig metrics is rendered above the map.
+    card with contig metrics is rendered above the map. A per-contig statistics
+    table is included when ``stats`` is provided.
 
     Parameters
     ----------
@@ -1614,6 +1748,8 @@ def _write_interactive_plot(
     feature_summary:
         Optional ``(label, value_html)`` tuple for the feature summary metric
         in the header. Defaults to ``"PHROG hits"`` / ``"N/M annotated"``.
+    stats:
+        Optional dictionary of per-contig statistics to render in the report.
     """
     features = [_feature_to_dict(f) for f in record.features]
     features.sort(key=lambda f: (f["start"], f["end"]))
@@ -1723,6 +1859,7 @@ def _write_interactive_plot(
         .replace("__GC_CONTENT_JSON__", json.dumps(gc_values))
         .replace("__GC_SKEW_JSON__", json.dumps(skew_values))
         .replace("__GC_CUM_SKEW_JSON__", json.dumps(cumulative_skew))
+        .replace("__STATS_TABLE_HTML__", _stats_table_html(stats))
         .replace("__THEME_CLASS__", theme_class)
         .replace("__THEME__", theme_value)
     )
@@ -1814,6 +1951,7 @@ def convert_to_html(
     fasta_path: str | os.PathLike[str] | None = None,
     meta_path: str | os.PathLike[str] | None = None,
     theme: str = "light",
+    stats_tsv: str | os.PathLike[str] | None = None,
 ) -> list[Path]:
     """Convert a GenBank or GFF file into an interactive HTML genome report.
 
@@ -1832,6 +1970,9 @@ def convert_to_html(
         used.
     theme:
         ``"light"`` or ``"dark"``.
+    stats_tsv:
+        Optional per-contig statistics TSV. When provided, the statistics for
+        each contig are displayed in the HTML report.
 
     Returns
     -------
@@ -1856,6 +1997,19 @@ def convert_to_html(
         raise ValueError(f"No records found in {input_path}")
 
     category_colors = _load_category_colors(meta_path)
+
+    stats_by_contig: dict[str, dict[str, Any]] = {}
+    if stats_tsv is not None:
+        stats_path = Path(stats_tsv)
+        if stats_path.is_file() and stats_path.stat().st_size > 0:
+            try:
+                stats_df = pd.read_csv(stats_path, sep="\t", low_memory=False)
+                stats_by_contig = {
+                    row["contig_id"]: row.to_dict()
+                    for _, row in stats_df.iterrows()
+                }
+            except (pd.errors.EmptyDataError, KeyError):
+                pass
 
     if suffix in {".gff", ".gff3"}:
         translation_tables = _parse_translation_tables(input_path)
@@ -1894,6 +2048,7 @@ def convert_to_html(
                 "FEATURES",
                 f'{feature_count} <span class="unit">features</span>',
             ),
+            stats=stats_by_contig.get(record.id),
         )
         logger.info("wrote interactive HTML report to %s", out_path)
 
@@ -2295,6 +2450,8 @@ def generate_plots_and_annotations(
     trf_path: str | os.PathLike[str] | None = None,
     extra_hits: dict[str, str | os.PathLike[str]] | None = None,
     defensefinder_tsv: str | os.PathLike[str] | None = None,
+    minced_gff: str | os.PathLike[str] | None = None,
+    stats_tsv: str | os.PathLike[str] | None = None,
 ) -> None:
     """Generate annotated GFF/GenBank and per-contig plots from HMM results.
 
@@ -2329,6 +2486,12 @@ def generate_plots_and_annotations(
         HMMER/phmmer hits produced by :func:`pca.pipeline.search_extra_db`.
     defensefinder_tsv:
         Optional path to a DefenseFinder ``defense_finder_genes.tsv`` file.
+    minced_gff:
+        Optional path to a MinCED GFF file. When provided, CRISPR arrays are
+        added to the GFF/GenBank records and plots.
+    stats_tsv:
+        Optional path to a per-contig statistics TSV file. When provided, the
+        statistics for each contig are displayed in the HTML report.
     """
     tmp_dir = Path(tmp_dir)
     plots_dir = tmp_dir / "plots"
@@ -2361,6 +2524,12 @@ def generate_plots_and_annotations(
     else:
         repeats = pd.DataFrame()
 
+    minced_path = Path(minced_gff) if minced_gff else None
+    if minced_path is not None and minced_path.is_file() and minced_path.stat().st_size > 0:
+        crispr_arrays = pd.DataFrame(parse_minced_gff(minced_path))
+    else:
+        crispr_arrays = pd.DataFrame()
+
     if search_results.empty:
         raise ValueError("hmmsearch returned zero matches")
 
@@ -2374,6 +2543,17 @@ def generate_plots_and_annotations(
         repeats["trf_no"] = repeats.index + 1
     else:
         repeats = None
+
+    if not crispr_arrays.empty:
+        crispr_arrays = crispr_arrays.rename(
+            columns={"qname": "contig"}
+        ).sort_values(by=["contig", "begin"]).reset_index(drop=True)
+        crispr_arrays["minced_no"] = crispr_arrays.index + 1
+        crispr_arrays["rpt_unit_seq"] = crispr_arrays["attributes"].apply(
+            _extract_minced_repeat_unit
+        )
+    else:
+        crispr_arrays = None
 
     extra_hits = extra_hits or {}
     extra_results: dict[str, pd.DataFrame] = {}
@@ -2422,6 +2602,8 @@ def generate_plots_and_annotations(
         category_colors["tRNA"] = "#e377c2"
     if repeats is not None:
         category_colors["tandem repeat"] = _DEFAULT_CATEGORY_COLORS["tandem repeat"]
+    if crispr_arrays is not None:
+        category_colors["CRISPR array"] = _DEFAULT_CATEGORY_COLORS["CRISPR array"]
     category_colors["other"] = _DEFAULT_CATEGORY_COLORS["other"]
 
     results_with_annotate = search_results.merge(
@@ -2443,6 +2625,19 @@ def generate_plots_and_annotations(
     gbk_out_path = annotations_dir / "annotations.gbk"
     per_contig_dir = annotations_dir / "per_contig"
     per_contig_dir.mkdir(parents=True, exist_ok=True)
+
+    stats_by_contig: dict[str, dict[str, Any]] = {}
+    if stats_tsv is not None:
+        stats_path = Path(stats_tsv)
+        if stats_path.is_file() and stats_path.stat().st_size > 0:
+            try:
+                stats_df = pd.read_csv(stats_path, sep="\t", low_memory=False)
+                stats_by_contig = {
+                    row["contig_id"]: row.to_dict()
+                    for _, row in stats_df.iterrows()
+                }
+            except (pd.errors.EmptyDataError, KeyError):
+                pass
 
     annotated_records: list[Any] = []
     with open(gff_out_path, "w") as out_handle:
@@ -2528,6 +2723,13 @@ def generate_plots_and_annotations(
                     tmp_repeats["feature"] = tmp_repeats.apply(_create_trf_feature, axis=1)
                     record.features.extend(tmp_repeats["feature"].to_list())
 
+            if crispr_arrays is not None:
+                tmp_crispr = crispr_arrays[crispr_arrays["contig"] == record.id]
+                if not tmp_crispr.empty:
+                    tmp_crispr = tmp_crispr.reset_index(drop=True)
+                    tmp_crispr["feature"] = tmp_crispr.apply(_create_minced_feature, axis=1)
+                    record.features.extend(tmp_crispr["feature"].to_list())
+
             annotated_records.append(record)
             GFF.write([record], out_handle)
 
@@ -2545,7 +2747,13 @@ def generate_plots_and_annotations(
                     record.id, translation_table
                 )
                 _write_interactive_plot(
-                    record, plots_dir, contig_length, category_colors, record_translation_table, theme
+                    record,
+                    plots_dir,
+                    contig_length,
+                    category_colors,
+                    record_translation_table,
+                    theme,
+                    stats=stats_by_contig.get(record.id),
                 )
 
             static_formats = requested_formats & {"pdf", "png"}

@@ -196,3 +196,67 @@ class TestDefenseFinder:
         # Input-prefixed names should have been renamed away
         assert not (out_dir / "proteins_defense_finder_genes.tsv").exists()
         assert not (out_dir / "proteins_defense_finder_systems.tsv").exists()
+
+
+class TestMinCED:
+    @staticmethod
+    def _make_fake_minced(bin_dir: Path) -> None:
+        """Write a fake ``minced`` executable that writes GFF and crisprs outputs."""
+        script = bin_dir / "minced"
+        nl = chr(10)
+        lines = [
+            "#!/usr/bin/env python",
+            "import sys, os",
+            "in_file = sys.argv[1]",
+            "table_out = sys.argv[2]",
+            "gff_out = sys.argv[3]",
+            "os.makedirs(os.path.dirname(table_out), exist_ok=True)",
+            "contigs = []",
+            "with open(in_file) as fh:",
+            "    for line in fh:",
+            "        if line.startswith('>'):",
+            "            contigs.append(line[1:].split()[0])",
+            "with open(table_out, 'w') as fh:",
+            "    for c in contigs:",
+            "        fh.write(c + '\\t1\\t10\\t5\\n')",
+            "with open(gff_out, 'w') as fh:",
+            "    fh.write('##gff-version 3\\n')",
+            "    for i, c in enumerate(contigs):",
+            "        fh.write(f'{c}\\tminced:0.4.2\\trepeat_region\\t{10+i*20}\\t{30+i*20}\\t5\\t.\\t.\\tID=CRISPR{i+1};rpt_type=direct;rpt_family=CRISPR;rpt_unit_seq=GTTCC\\n')",
+            "print('done')",
+        ]
+        script.write_text(nl.join(lines))
+        script.chmod(0o755)
+
+    def test_run_minced_writes_gff_and_crisprs(self, tmp_path: Path, monkeypatch) -> None:
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        self._make_fake_minced(bin_dir)
+        monkeypatch.setenv(
+            "PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        )
+
+        fasta = tmp_path / "contigs.fna"
+        fasta.write_text(
+            ">c1\nACGTACGTACGTACGTACGTACGT\n"
+            ">c2\nTGCATGCATGCATGCATGCATGCA\n"
+        )
+
+        out_prefix = str(tmp_path / "minced" / "minced")
+        assert externals.run_minced(out_prefix, str(fasta))
+
+        gff = Path(f"{out_prefix}.gff")
+        crisprs = Path(f"{out_prefix}.crisprs")
+        assert gff.is_file()
+        assert crisprs.is_file()
+        gff_text = gff.read_text()
+        assert "repeat_region" in gff_text
+        assert "rpt_family=CRISPR" in gff_text
+        assert "c1\t" in gff_text
+        assert "c2\t" in gff_text
+
+    def test_run_minced_missing_executable(self, tmp_path: Path) -> None:
+        fasta = tmp_path / "contigs.fna"
+        fasta.write_text(">c1\nACGTACGTACGTACGTACGTACGT\n")
+        out_prefix = str(tmp_path / "minced" / "minced")
+        assert not externals.run_minced(out_prefix, str(fasta))

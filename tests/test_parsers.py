@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pca.parsers import parse_crispr_cas_finder_gff, parse_trf_dat
+from pca.parsers import parse_crispr_cas_finder_gff, parse_minced_gff, parse_trf_dat
 
 
 def test_parse_crispr_cas_finder_gff_extracts_crispr_features(tmp_path: Path) -> None:
@@ -37,6 +37,38 @@ def test_parse_crispr_cas_finder_gff_skips_header_and_blank_lines(
     records = list(parse_crispr_cas_finder_gff(gff))
     assert len(records) == 1
 
+
+def test_parse_minced_gff_extracts_crispr_repeat_regions(tmp_path: Path) -> None:
+    gff = tmp_path / "minced.gff"
+    gff.write_text(
+        "##gff-version 3\n"
+        "contig1\tminced:0.4.2\trepeat_region\t10\t30\t5\t.\t.\tID=CRISPR1;rpt_type=direct;rpt_family=CRISPR;rpt_unit_seq=GTTCC\n"
+        "contig1\tminced:0.4.2\trepeat_region\t50\t70\t4\t+\t.\tID=CRISPR2;rpt_family=CRISPR\n"
+        "contig1\tminced:0.4.2\trepeat_region\t90\t110\t3\t.\t.\tID=other;rpt_family=other\n"
+        "contig2\tminced:0.4.2\tCDS\t1\t100\t.\t+\t.\tID=gene1\n"
+    )
+    records = list(parse_minced_gff(gff))
+    assert len(records) == 2
+    assert records[0]["qname"] == "contig1"
+    assert records[0]["begin"] == 10
+    assert records[0]["end"] == 30
+    assert records[0]["score"] == 5.0
+    assert records[0]["strand"] == "."
+    assert records[1]["begin"] == 50
+    assert records[1]["score"] == 4.0
+
+
+def test_parse_minced_gff_skips_header_and_non_crispr_features(
+    tmp_path: Path,
+) -> None:
+    gff = tmp_path / "minced.gff"
+    gff.write_text(
+        "# MinCED output\n"
+        "\n"
+        "contig1\tminced:0.4.2\trepeat_region\t10\t30\t.\t.\t.\tID=CRISPR1;rpt_family=CRISPR\n"
+    )
+    records = list(parse_minced_gff(gff))
+    assert len(records) == 1
 
 def test_parse_trf_dat_extracts_repeats_per_sequence(tmp_path: Path) -> None:
     dat = tmp_path / "repeats.dat"

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from pca import cli
+from pca import cli, databases
 
 
 def test_main_without_command_prints_help() -> None:
@@ -46,8 +46,13 @@ def test_run_help_includes_gene_caller() -> None:
 
 def _make_minimal_db(db_dir: Path) -> None:
     db_dir.mkdir(parents=True, exist_ok=True)
-    (db_dir / "test.hmm").write_text("dummy")
-    (db_dir / "PHROG_annot_v4.csv").write_text("#phrog,Annotation,Category,color\n")
+    phrogs_dir = db_dir / "phrogs"
+    (phrogs_dir / "hmms").mkdir(parents=True)
+    (phrogs_dir / "hmms" / "test.hmm").write_text("dummy")
+    (phrogs_dir / "metadata").mkdir(parents=True)
+    (phrogs_dir / "metadata" / "PHROG_annot_v4.csv").write_text(
+        "#phrog,Annotation,Category,color\n"
+    )
 
 
 def test_run_rejects_phanotate_when_not_installed(tmp_path: Path, monkeypatch) -> None:
@@ -186,10 +191,21 @@ def test_run_converts_genbank_input_to_fasta(tmp_path: Path, monkeypatch) -> Non
 def test_discover_databases_finds_flat_layout(tmp_path) -> None:
     (tmp_path / "test.hmm").write_text("dummy")
     (tmp_path / "PHROG_annot_v4.csv").write_text("dummy")
-    hmmerdb, meta_path = cli._discover_databases(str(tmp_path))
-    assert meta_path is not None
-    assert Path(meta_path).name == "PHROG_annot_v4.csv"
-    assert "hmmerdb" in hmmerdb
+    discovered = databases.discover_databases(str(tmp_path))
+    assert "phrogs" in discovered
+    assert discovered["phrogs"].has_hmms
+    assert discovered["phrogs"].has_metadata
+
+
+def test_discover_databases_finds_hierarchical_layout(tmp_path) -> None:
+    (tmp_path / "phrogs" / "hmms").mkdir(parents=True)
+    (tmp_path / "phrogs" / "hmms" / "model.hmm").write_text("dummy")
+    (tmp_path / "phrogs" / "metadata").mkdir(parents=True)
+    (tmp_path / "phrogs" / "metadata" / "PHROG_annot_v4.csv").write_text("dummy")
+    discovered = databases.discover_databases(str(tmp_path))
+    assert "phrogs" in discovered
+    assert discovered["phrogs"].has_hmms
+    assert discovered["phrogs"].has_metadata
 
 
 def test_discover_databases_finds_packaged_layout(tmp_path) -> None:
@@ -197,20 +213,85 @@ def test_discover_databases_finds_packaged_layout(tmp_path) -> None:
     (tmp_path / "hmmerdb_test" / "model.hmm").write_text("dummy")
     (tmp_path / "meta").mkdir()
     (tmp_path / "meta" / "PHROG_annot_v4.csv").write_text("dummy")
-    hmmerdb, meta_path = cli._discover_databases(str(tmp_path))
-    assert meta_path is not None
-    assert "hmmerdb" in hmmerdb
+    discovered = databases.discover_databases(str(tmp_path))
+    assert "hmmerdb" in discovered
+    assert discovered["hmmerdb"].has_hmms
+    assert discovered["hmmerdb"].has_metadata
 
 
 def test_normalize_database_dir_organizes_flat_files(tmp_path) -> None:
     (tmp_path / "model.hmm").write_text("dummy")
     (tmp_path / "PHROG_annot_v4.csv").write_text("dummy")
-    cli._normalize_database_dir(str(tmp_path))
-    assert (tmp_path / "hmmerdb" / "model.hmm").is_file()
-    assert (tmp_path / "meta" / "PHROG_annot_v4.csv").is_file()
+    databases.normalize_database_dir(str(tmp_path))
+    assert (tmp_path / "phrogs" / "hmms" / "model.hmm").is_file()
+    assert (tmp_path / "phrogs" / "metadata" / "PHROG_annot_v4.csv").is_file()
 
 
-def test_utils_group_help() -> None:
+def test_normalize_database_dir_organizes_multiple_databases(tmp_path) -> None:
+    (tmp_path / "phrogs").mkdir()
+    (tmp_path / "phrogs" / "9.hmm").write_text("dummy")
+    (tmp_path / "phrogs" / "PHROG_annot_v4.csv").write_text("dummy")
+    (tmp_path / "apis").mkdir()
+    (tmp_path / "apis" / "dbAPIS.hmm").write_text("dummy")
+    (tmp_path / "apis" / "dbAPIS.hmm.h3f").write_text("dummy")
+
+    databases.normalize_database_dir(str(tmp_path))
+
+    assert (tmp_path / "phrogs" / "hmms" / "9.hmm").is_file()
+    assert (tmp_path / "phrogs" / "metadata" / "PHROG_annot_v4.csv").is_file()
+    assert (tmp_path / "apis" / "hmms" / "dbAPIS.hmm").is_file()
+    assert (tmp_path / "apis" / "hmms" / "dbAPIS.hmm.h3f").is_file()
+
+    discovered = databases.discover_databases(str(tmp_path))
+    assert "phrogs" in discovered
+    assert "apis" in discovered
+    assert discovered["phrogs"].has_hmms
+    assert discovered["phrogs"].has_metadata
+    assert discovered["apis"].has_hmms
+
+
+    (tmp_path / "model.hmm").write_text("dummy")
+    (tmp_path / "PHROG_annot_v4.csv").write_text("dummy")
+    databases.normalize_database_dir(str(tmp_path))
+    assert (tmp_path / "phrogs" / "hmms" / "model.hmm").is_file()
+    assert (tmp_path / "phrogs" / "metadata" / "PHROG_annot_v4.csv").is_file()
+
+
+def test_utils_reorganize_db_dry_run_lists_databases(tmp_path: Path) -> None:
+    (tmp_path / "phrogs").mkdir()
+    (tmp_path / "phrogs" / "9.hmm").write_text("dummy")
+    (tmp_path / "phrogs" / "PHROG_annot_v4.csv").write_text("dummy")
+    (tmp_path / "apis").mkdir()
+    (tmp_path / "apis" / "dbAPIS.hmm").write_text("dummy")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["utils", "reorganize-db", "--path", str(tmp_path), "--dry-run"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "phrogs" in result.output
+    assert "apis" in result.output
+
+
+def test_utils_reorganize_db_reorganizes_multiple_databases(tmp_path: Path) -> None:
+    (tmp_path / "phrogs").mkdir()
+    (tmp_path / "phrogs" / "9.hmm").write_text("dummy")
+    (tmp_path / "phrogs" / "PHROG_annot_v4.csv").write_text("dummy")
+    (tmp_path / "apis").mkdir()
+    (tmp_path / "apis" / "dbAPIS.hmm").write_text("dummy")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        ["utils", "reorganize-db", "--path", str(tmp_path)],
+    )
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "phrogs" / "hmms" / "9.hmm").is_file()
+    assert (tmp_path / "phrogs" / "metadata" / "PHROG_annot_v4.csv").is_file()
+    assert (tmp_path / "apis" / "hmms" / "dbAPIS.hmm").is_file()
+
+
     runner = CliRunner()
     result = runner.invoke(cli.main, ["utils", "--help"])
     assert result.exit_code == 0

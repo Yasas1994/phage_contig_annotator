@@ -18,7 +18,8 @@ import pandas as pd
 from BCBio import GFF
 
 from pca.io import get_compressed_file_handle, read_fasta
-from pca.parsers import parse_crispr_cas_finder_gff, parse_trf_dat
+from pca.multicopy import detect_multicopy
+from pca.parsers import parse_crispr_cas_finder_gff, parse_minced_gff, parse_trf_dat
 
 logger = logging.getLogger(__name__)
 
@@ -141,14 +142,19 @@ def crispr_stats(
     crispr_gff_path: str | Path,
     contig_id: str,
 ) -> dict[str, Any]:
-    """Return CRISPR array statistics for ``contig_id`` from a CRISPRCasFinder GFF."""
+    """Return CRISPR array statistics for ``contig_id`` from a GFF file.
+
+    Accepts both CRISPRCasFinder GFFs (feature type ``CRISPR``) and MinCED
+    GFFs (feature type ``repeat_region`` with ``rpt_family=CRISPR``).
+    """
     count = 0
     total_length = 0
-    for record in parse_crispr_cas_finder_gff(crispr_gff_path):
-        if record.get("qname") != contig_id:
-            continue
-        count += 1
-        total_length += record["end"] - record["begin"] + 1
+    for parser in (parse_crispr_cas_finder_gff, parse_minced_gff):
+        for record in parser(crispr_gff_path):
+            if record.get("qname") != contig_id:
+                continue
+            count += 1
+            total_length += record["end"] - record["begin"] + 1
     return {
         "n_crispr_arrays": count,
         "total_crispr_array_length": total_length,
@@ -213,22 +219,30 @@ def compute_genome_stats(
     gff_path: str | Path,
     trf_path: str | Path | None = None,
     crispr_path: str | Path | None = None,
+    minced_path: str | Path | None = None,
+    multicopy_path: str | Path | None = None,
 ) -> pd.DataFrame:
     """Compute a per-contig statistics table.
 
     Parameters
     ----------
     fasta_path:
-        Nucleotide FASTA file (possibly compressed) containing the contigs.
+        Path to a nucleotide FASTA file.
     gff_path:
-        GFF file with gene/CDS features. Features are sorted by start
-        position per contig.
+        Path to a gene-calling GFF file. Used to count genes and compute
+        strand-switch metrics.
     trf_path:
-        Optional TRF ``.dat`` file. If provided, tandem-repeat statistics are
-        included.
+        Optional Tandem Repeats Finder ``.dat`` file. If provided, tandem repeat
+        statistics are included.
     crispr_path:
         Optional CRISPRCasFinder GFF file. If provided, CRISPR array counts
         are included.
+    minced_path:
+        Optional MinCED GFF file. If provided, CRISPR array counts are
+        included and combined with any CRISPRCasFinder results.
+    multicopy_path:
+        Optional multi-copy detection TSV. If provided, copy-number
+        estimates and confidence are merged into the table.
 
     Returns
     -------
@@ -248,10 +262,28 @@ def compute_genome_stats(
         if trf_path is not None and length > 0:
             stats.update(tandem_repeat_stats(trf_path, contig_id, length))
         if crispr_path is not None:
-            stats.update(crispr_stats(crispr_path, contig_id))
+            crispr_stats_ = crispr_stats(crispr_path, contig_id)
+            stats["n_crispr_arrays"] = stats.get("n_crispr_arrays", 0) + crispr_stats_["n_crispr_arrays"]
+            stats["total_crispr_array_length"] = stats.get("total_crispr_array_length", 0) + crispr_stats_["total_crispr_array_length"]
+        if minced_path is not None:
+            minced_stats_ = crispr_stats(minced_path, contig_id)
+            stats["n_crispr_arrays"] = stats.get("n_crispr_arrays", 0) + minced_stats_["n_crispr_arrays"]
+            stats["total_crispr_array_length"] = stats.get("total_crispr_array_length", 0) + minced_stats_["total_crispr_array_length"]
         rows.append(stats)
 
     df = pd.DataFrame(rows)
+
+    multicopy_df = pd.DataFrame()
+    if multicopy_path is not None:
+        multicopy_path_obj = Path(multicopy_path)
+        if multicopy_path_obj.is_file() and multicopy_path_obj.stat().st_size > 0:
+            multicopy_df = pd.read_csv(multicopy_path_obj, sep="\t", low_memory=False)
+            if not multicopy_df.empty:
+                keep_cols = ["contig_id", "mean_kmer_freq", "copies_kmer", "fft_period_bp", "fft_snr", "copies_fft", "copies_final", "genome_unit_bp", "confidence", "flag"]
+                multicopy_df = multicopy_df[[c for c in keep_cols if c in multicopy_df.columns]]
+                multicopy_df = multicopy_df.rename(columns={"confidence": "multicopy_confidence", "flag": "multicopy_flag"})
+                df = df.merge(multicopy_df, on="contig_id", how="left")
+
     if not df.empty:
         column_order = [
             "contig_id",
@@ -269,6 +301,15 @@ def compute_genome_stats(
             "tandem_repeat_density",
             "n_crispr_arrays",
             "total_crispr_array_length",
+            "mean_kmer_freq",
+            "copies_kmer",
+            "fft_period_bp",
+            "fft_snr",
+            "copies_fft",
+            "copies_final",
+            "genome_unit_bp",
+            "multicopy_confidence",
+            "multicopy_flag",
         ]
         # Only include columns that actually exist (optional inputs may be missing).
         df = df[[c for c in column_order if c in df.columns]]
