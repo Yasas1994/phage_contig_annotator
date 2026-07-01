@@ -37,6 +37,7 @@ class TestModuleFacades:
 
     def test_pipeline_symbols_re_exported(self) -> None:
         assert utils.call_genes_phanotate is pipeline.call_genes_phanotate
+        assert utils.call_genes_phanotate_rs is pipeline.call_genes_phanotate_rs
         assert utils.call_genes_pyrodigal is pipeline.call_genes_pyrodigal
         assert utils.search_extra_db is pipeline.search_extra_db
         assert utils.search_hmms_pyhmmer is pipeline.search_hmms_pyhmmer
@@ -371,6 +372,86 @@ class TestPhanotate:
         out_gff = tmp_path / "proteins.gff"
 
         pipeline.call_genes_phanotate(fna, out_faa, out_gff, translation_table=11)
+
+        assert out_faa.is_file()
+        assert out_gff.is_file()
+
+
+class TestPhanotateRs:
+    @staticmethod
+    def _make_fake_phanotate_rs(bin_dir: Path) -> None:
+        script = bin_dir / "phanotate-rs"
+        nl = chr(10)
+        tab = chr(9)
+        lines = [
+            "#!/usr/bin/env python",
+            "import sys",
+            "out = 'phanotate_rs.gff'",
+            "in_ = None",
+            "i = 1",
+            "while i < len(sys.argv):",
+            "    if sys.argv[i] == '-o' and i + 1 < len(sys.argv):",
+            "        out = sys.argv[i + 1]",
+            "        i += 2",
+            "    elif sys.argv[i] == '-i' and i + 1 < len(sys.argv):",
+            "        in_ = sys.argv[i + 1]",
+            "        i += 2",
+            "    elif sys.argv[i] in ('-f', '-g', '-t'):",
+            "        i += 2",
+            "    else:",
+            "        i += 1",
+            "with open(out, 'w') as fh:",
+            "    fh.write('##gff-version 3' + chr(10))",
+            "    fh.write('##sequence-region contig1 1 63' + chr(10))",
+            # Positive strand CDS
+            "    fh.write('contig1' + chr(9) + 'phanotate' + chr(9) + 'CDS' + chr(9) + '1' + chr(9) + '30' + chr(9) + '.' + chr(9) + '+' + chr(9) + '0' + chr(9) + 'ID=CDS_1_30' + chr(10))",
+            # Negative strand CDS with PHANOTATE-rs swapped coordinates
+            "    fh.write('contig1' + chr(9) + 'phanotate' + chr(9) + 'CDS' + chr(9) + '63' + chr(9) + '31' + chr(9) + '.' + chr(9) + '-' + chr(9) + '0' + chr(9) + 'ID=CDS_63_31' + chr(10))",
+        ]
+        script.write_text(nl.join(lines))
+        script.chmod(0o755)
+
+    def test_call_genes_phanotate_rs(self, tmp_path: Path, monkeypatch) -> None:
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        self._make_fake_phanotate_rs(bin_dir)
+        monkeypatch.setenv(
+            "PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        )
+
+        fna = tmp_path / "input.fna"
+        fna.write_text(">contig1" + chr(10) + "ATG" * 20 + "TAA" + chr(10))
+        out_faa = tmp_path / "proteins.faa"
+        out_gff = tmp_path / "proteins.gff"
+
+        pipeline.call_genes_phanotate_rs(fna, out_faa, out_gff)
+
+        assert out_faa.is_file()
+        assert out_gff.is_file()
+        faa_text = out_faa.read_text()
+        assert ">contig1_1" in faa_text
+        assert ">contig1_2" in faa_text
+        assert "M" * 10 in faa_text
+        gff_text = out_gff.read_text()
+        assert "ID=contig1_1" in gff_text
+        assert "ID=contig1_2" in gff_text
+        # Normalized coordinates: 31..63 on the negative strand
+        assert "\t31\t63\t" in gff_text
+
+    def test_call_genes_phanotate_rs_translation_table(self, tmp_path: Path, monkeypatch) -> None:
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        self._make_fake_phanotate_rs(bin_dir)
+        monkeypatch.setenv(
+            "PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+        )
+
+        fna = tmp_path / "input.fna"
+        fna.write_text(">contig1" + chr(10) + "ATG" * 20 + "TAA" + chr(10))
+        out_faa = tmp_path / "proteins.faa"
+        out_gff = tmp_path / "proteins.gff"
+
+        pipeline.call_genes_phanotate_rs(fna, out_faa, out_gff, translation_table=11)
 
         assert out_faa.is_file()
         assert out_gff.is_file()

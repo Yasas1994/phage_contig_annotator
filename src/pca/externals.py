@@ -24,6 +24,7 @@ __all__ = [
     "run_defensefinder",
     "run_minced",
     "run_phanotate",
+    "run_phanotate_rs",
     "run_trf",
     "run_trnascan",
 ]
@@ -35,6 +36,14 @@ def _phanotate_executable() -> str:
         if shutil.which(cmd):
             return cmd
     return "phanotate.py"
+
+
+def _phanotate_rs_executable() -> str:
+    """Return the PHANOTATE-rs command available on PATH."""
+    for cmd in ("phanotate-rs",):
+        if shutil.which(cmd):
+            return cmd
+    return "phanotate-rs"
 
 
 def _crispr_cas_finder_executable() -> str | None:
@@ -271,6 +280,31 @@ def run_phanotate(in_: str, out: str, threads: int = 1) -> bool:
         in_,
         "-o", str(out_path),
         "-f", "gff3",
+    ]
+    return _run_tool(cmd, f"{out}.log", f"{out}.cmd")
+
+
+def run_phanotate_rs(
+    in_: str,
+    out: str,
+    threads: int = 1,
+    translation_table: int = 11,
+) -> bool:
+    """Run PHANOTATE-rs on a nucleotide FASTA file and write a GFF3 file.
+
+    PHANOTATE-rs is a Rust reimplementation of PHANOTATE specialized for
+    phage genomes. The wrapper requests GFF3 output and uses the provided
+    translation table for downstream reporting.
+    """
+    out_path = Path(out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        _phanotate_rs_executable(),
+        "-i", in_,
+        "-f", "gff",
+        "-o", str(out_path),
+        "-g", str(translation_table),
+        "-t", str(threads),
     ]
     return _run_tool(cmd, f"{out}.log", f"{out}.cmd")
 

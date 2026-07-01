@@ -213,7 +213,7 @@ def main(ctx: click.Context, quiet: bool) -> None:
     "gene_caller",
     default="pyrodigal-gv",
     show_default=True,
-    type=click.Choice(["pyrodigal-gv", "phanotate"], case_sensitive=False),
+    type=click.Choice(["pyrodigal-gv", "phanotate", "phanotate-rs"], case_sensitive=False),
     help="Gene prediction method for contigs (ignored for protein inputs).",
 )
 @click.option(
@@ -373,11 +373,18 @@ def run(
         raise click.UsageError("Multi-copy detection is only supported for contig inputs.")
 
     gene_caller = gene_caller.lower()
-    if input_type == "contigs" and gene_caller == "phanotate":
-        if not (shutil.which("phanotate.py") or shutil.which("phanotate")):
+    if input_type == "contigs":
+        if gene_caller == "phanotate" and not (
+            shutil.which("phanotate.py") or shutil.which("phanotate")
+        ):
             raise click.UsageError(
                 "Gene caller 'phanotate' was selected but PHANOTATE is not on PATH. "
                 "Install it (`pip install phanotate`) or choose 'pyrodigal-gv'."
+            )
+        if gene_caller == "phanotate-rs" and not shutil.which("phanotate-rs"):
+            raise click.UsageError(
+                "Gene caller 'phanotate-rs' was selected but phanotate-rs is not on PATH. "
+                "Install it (https://github.com/Yasas1994/PHANOTATE-rs) or choose 'pyrodigal-gv'."
             )
 
     extra_dbs_list = list(extra_dbs)

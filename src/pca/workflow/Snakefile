@@ -143,6 +143,16 @@ if input_type == "contigs":
                     output.gff,
                     threads=threads,
                 )
+            elif gene_caller == "phanotate-rs":
+                from pca.pipeline import call_genes_phanotate_rs
+
+                call_genes_phanotate_rs(
+                    input.fna,
+                    output.faa,
+                    output.gff,
+                    threads=threads,
+                    translation_table=translation_table,
+                )
             else:
                 from pca.pipeline import call_genes_pyrodigal
 

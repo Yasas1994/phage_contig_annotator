@@ -38,6 +38,7 @@ from pca.parsers import (
 )
 from pca.pipeline import (
     call_genes_phanotate,
+    call_genes_phanotate_rs,
     call_genes_pyrodigal,
     search_extra_db,
     search_hmms_pyhmmer,
@@ -97,6 +98,7 @@ __all__ = [
     "compute_genome_stats",
     # pipeline
     "call_genes_phanotate",
+    "call_genes_phanotate_rs",
     "call_genes_pyrodigal",
     "search_extra_db",
     "search_hmms_pyhmmer",

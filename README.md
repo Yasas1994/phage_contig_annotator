@@ -6,7 +6,7 @@
 
 Annotates genes on putative phage contigs with a database of hidden Markov models (HMMs) based on [PHROGs](https://phrogs.lmge.uca.fr/). This tool was built to support visual confirmation of predictions made by [Jaeger](https://github.com/Yasas1994/Jaeger).
 
-The pipeline is managed by [Snakemake](https://snakemake.github.io/), uses [pyrodigal-gv](https://github.com/althonos/pyrodigal-gv) for gene calling, [pyhmmer](https://github.com/althonos/pyhmmer) for HMM search, and [tRNAscan-SE](http://lowelab.ucsc.edu/tRNAscan-SE/) for tRNA prediction.
+The pipeline is managed by [Snakemake](https://snakemake.github.io/), uses [pyrodigal-gv](https://github.com/althonos/pyrodigal-gv) for gene calling by default, [pyhmmer](https://github.com/althonos/pyhmmer) for HMM search, and [tRNAscan-SE](http://lowelab.ucsc.edu/tRNAscan-SE/) for tRNA prediction. PHANOTATE and PHANOTATE-rs are also supported as alternative gene callers.
 
 ## Requirements
 
@@ -144,6 +144,20 @@ output_dir/
     ├── trna.tsv          # tRNAscan-SE tabular output
     └── trna.gff          # tRNAscan-SE GFF output
 ```
+
+Use an alternative gene caller (`pyrodigal-gv` is the default):
+
+```bash
+# Original Python PHANOTATE implementation
+phage_contig_annotator run --input test/bin.460.fna --output output_dir --cpus 10 \
+  --gene-caller phanotate
+
+# Rust reimplementation of PHANOTATE (https://github.com/Yasas1994/PHANOTATE-rs)
+phage_contig_annotator run --input test/bin.460.fna --output output_dir --cpus 10 \
+  --gene-caller phanotate-rs
+```
+
+`phanotate` and `phanotate-rs` must be installed separately and available on `PATH`.
 
 ### Output options
 

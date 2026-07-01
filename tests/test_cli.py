@@ -42,6 +42,7 @@ def test_run_help_includes_gene_caller() -> None:
     result = runner.invoke(cli.main, ["run", "--help"])
     assert result.exit_code == 0
     assert "--gene-caller" in result.output
+    assert "phanotate-rs" in result.output
 
 
 def _make_minimal_db(db_dir: Path) -> None:
@@ -80,6 +81,81 @@ def test_run_rejects_phanotate_when_not_installed(tmp_path: Path, monkeypatch) -
     )
     assert result.exit_code != 0
     assert "PHANOTATE is not on PATH" in result.output
+
+
+def test_run_rejects_phanotate_rs_when_not_installed(tmp_path: Path, monkeypatch) -> None:
+    db_dir = tmp_path / "db"
+    _make_minimal_db(db_dir)
+    input_fna = tmp_path / "input.fna"
+    input_fna.write_text(">contig1\n" + "ATG" * 20 + "TAA\n")
+
+    empty_bin = tmp_path / "empty_bin"
+    empty_bin.mkdir()
+    monkeypatch.setenv("PATH", str(empty_bin))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        [
+            "run",
+            "-i", str(input_fna),
+            "-o", str(tmp_path / "out"),
+            "--db", str(db_dir),
+            "--gene-caller", "phanotate-rs",
+            "--skip-trna",
+            "--skip-trf",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "phanotate-rs is not on PATH" in result.output
+
+
+def test_run_writes_phanotate_rs_gene_caller_to_config(tmp_path: Path, monkeypatch) -> None:
+    import os
+    import subprocess
+
+    db_dir = tmp_path / "db"
+    _make_minimal_db(db_dir)
+    input_fna = tmp_path / "input.fna"
+    input_fna.write_text(">contig1\n" + "ATG" * 20 + "TAA\n")
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "phanotate-rs").write_text("#!/usr/bin/env python\nprint(1)\n")
+    (bin_dir / "phanotate-rs").chmod(0o755)
+    monkeypatch.setenv(
+        "PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+    )
+
+    captured: list[dict] = []
+
+    def fake_run(cmd, **kwargs):
+        captured.append({"cmd": cmd, "kwargs": kwargs})
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr("pca.cli.subprocess.run", fake_run)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.main,
+        [
+            "run",
+            "-i", str(input_fna),
+            "-o", str(tmp_path / "out"),
+            "--db", str(db_dir),
+            "--gene-caller", "phanotate-rs",
+            "--skip-trna",
+            "--skip-trf",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert captured
+
+    import yaml
+    config_path = tmp_path / "out" / "config.yaml"
+    assert config_path.is_file()
+    config = yaml.safe_load(config_path.read_text())
+    assert config["gene_caller"] == "phanotate-rs"
 
 
 def test_run_writes_gene_caller_to_config(tmp_path: Path, monkeypatch) -> None:

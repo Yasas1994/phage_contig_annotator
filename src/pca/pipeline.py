@@ -18,12 +18,13 @@ from Bio.Seq import Seq
 from pyhmmer.easel import Alphabet, SequenceFile
 from pyhmmer.plan7 import HMM, HMMFile, TopHits
 
-from pca.externals import run_phanotate
+from pca.externals import run_phanotate, run_phanotate_rs
 from pca.io import read_fasta
 from pca.parsers import parse_hmmsearch
 
 __all__ = [
     "call_genes_phanotate",
+    "call_genes_phanotate_rs",
     "call_genes_pyrodigal",
     "search_extra_db",
     "search_hmms_pyhmmer",
@@ -245,6 +246,34 @@ def call_genes_pyrodigal(
     logger.info("wrote %s and %s", out_faa, out_gff)
 
 
+def _normalize_phanotate_gff_coordinates(
+    gff_path: str | os.PathLike[str], out_path: str | os.PathLike[str]
+) -> None:
+    """Normalize PHANOTATE/PHANOTATE-rs GFF coordinates for BCBio.GFF.
+
+    PHANOTATE-rs (and some PHANOTATE versions) emit negative-strand CDS
+    features with the start column greater than the end column. GFF requires
+    start <= end, with the strand sign carrying the orientation. This helper
+    swaps those coordinates in place before parsing.
+    """
+    with open(gff_path) as in_fh, open(out_path, "w") as out_fh:
+        for line in in_fh:
+            if line.startswith("#") or not line.strip():
+                out_fh.write(line)
+                continue
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) >= 5:
+                try:
+                    start = int(parts[3])
+                    end = int(parts[4])
+                except ValueError:
+                    pass
+                else:
+                    if start > end:
+                        parts[3], parts[4] = str(end), str(start)
+            out_fh.write("\t".join(parts) + "\n")
+
+
 def _parse_phanotate_gff(
     gff_path: str | os.PathLike[str],
     sequences: dict[str, Seq],
@@ -293,6 +322,57 @@ def _parse_phanotate_gff(
     return records
 
 
+def call_genes_phanotate_rs(
+    in_fna: str | os.PathLike[str],
+    out_faa: str | os.PathLike[str],
+    out_gff: str | os.PathLike[str],
+    threads: int = 1,
+    translation_table: int | None = None,
+) -> None:
+    """Predict genes with PHANOTATE-rs and write proteins + GFF.
+
+    PHANOTATE-rs is a Rust reimplementation of PHANOTATE. The wrapper
+    requests GFF3 output, parses it, and translates the proteins using
+    the selected NCBI translation table.
+    """
+    in_fna = Path(in_fna)
+    out_faa = Path(out_faa)
+    out_gff = Path(out_gff)
+    out_faa.parent.mkdir(parents=True, exist_ok=True)
+    out_gff.parent.mkdir(parents=True, exist_ok=True)
+
+    table = translation_table if translation_table is not None else 11
+
+    logger.info("gene calling with PHANOTATE-rs: %s", in_fna)
+    with tempfile.TemporaryDirectory(prefix="phanotate_rs_") as tmp:
+        tmp_path = Path(tmp)
+        raw_gff = tmp_path / "phanotate_rs.gff"
+        normalized_gff = tmp_path / "phanotate_rs_normalized.gff"
+        success = run_phanotate_rs(
+            str(in_fna), str(raw_gff), threads=threads, translation_table=table
+        )
+        if not success or not raw_gff.is_file():
+            raise RuntimeError(f"PHANOTATE-rs gene calling failed for {in_fna}")
+
+        _normalize_phanotate_gff_coordinates(raw_gff, normalized_gff)
+        sequences = {seq_id: Seq(seq) for seq_id, seq in read_fasta(in_fna)}
+        records = _parse_phanotate_gff(normalized_gff, sequences, translation_table=table)
+
+    with open(out_faa, "w") as faa_fh:
+        for record in records:
+            for feature in record.features:
+                if feature.type != "CDS":
+                    continue
+                qname = feature.qualifiers.get("ID", ["unknown"])[0]
+                protein = feature.qualifiers.get("translation", [""])[0]
+                faa_fh.write(f">{qname}\n{protein}\n")
+
+    with open(out_gff, "w") as gff_fh:
+        GFF.write(records, gff_fh)
+
+    logger.info("wrote %s and %s", out_faa, out_gff)
+
+
 def call_genes_phanotate(
     in_fna: str | os.PathLike[str],
     out_faa: str | os.PathLike[str],
@@ -317,12 +397,14 @@ def call_genes_phanotate(
     with tempfile.TemporaryDirectory(prefix="phanotate_") as tmp:
         tmp_path = Path(tmp)
         raw_gff = tmp_path / "phanotate.gff"
+        normalized_gff = tmp_path / "phanotate_normalized.gff"
         success = run_phanotate(str(in_fna), str(raw_gff), threads=threads)
         if not success or not raw_gff.is_file():
             raise RuntimeError(f"PHANOTATE gene calling failed for {in_fna}")
 
+        _normalize_phanotate_gff_coordinates(raw_gff, normalized_gff)
         sequences = {seq_id: Seq(seq) for seq_id, seq in read_fasta(in_fna)}
-        records = _parse_phanotate_gff(raw_gff, sequences, translation_table=table)
+        records = _parse_phanotate_gff(normalized_gff, sequences, translation_table=table)
 
     with open(out_faa, "w") as faa_fh:
         for record in records:
