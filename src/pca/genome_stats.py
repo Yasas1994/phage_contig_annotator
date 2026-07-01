@@ -63,14 +63,12 @@ def strand_run_stats(strands: Sequence[str]) -> dict[str, Any]:
     - ``n_runs``: number of consecutive same-strand runs
     - ``mean_run_length``: average run length
     - ``max_run_length``: longest run length
-    - ``switch_rate``: (n_runs - 1) / (N - 1)
     """
     if not strands:
         return {
             "n_runs": 0,
             "mean_run_length": 0.0,
             "max_run_length": 0,
-            "switch_rate": 0.0,
         }
     runs = [list(g) for _, g in groupby(strands)]
     run_lengths = [len(r) for r in runs]
@@ -79,7 +77,6 @@ def strand_run_stats(strands: Sequence[str]) -> dict[str, Any]:
         "n_runs": len(runs),
         "mean_run_length": sum(run_lengths) / len(run_lengths),
         "max_run_length": max(run_lengths),
-        "switch_rate": (len(runs) - 1) / (n - 1) if n > 1 else 0.0,
     }
 
 
@@ -295,7 +292,6 @@ def compute_genome_stats(
             "n_runs",
             "mean_run_length",
             "max_run_length",
-            "switch_rate",
             "n_tandem_repeats",
             "total_tandem_repeat_length",
             "tandem_repeat_density",

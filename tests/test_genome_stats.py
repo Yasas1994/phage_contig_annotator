@@ -34,7 +34,6 @@ class TestStrandRunStats:
             "n_runs": 0,
             "mean_run_length": 0.0,
             "max_run_length": 0,
-            "switch_rate": 0.0,
         }
 
     def test_single_run(self) -> None:
@@ -42,7 +41,6 @@ class TestStrandRunStats:
             "n_runs": 1,
             "mean_run_length": 3.0,
             "max_run_length": 3,
-            "switch_rate": 0.0,
         }
 
     def test_multiple_runs(self) -> None:
@@ -50,7 +48,6 @@ class TestStrandRunStats:
         assert stats["n_runs"] == 3
         assert stats["mean_run_length"] == pytest.approx(5 / 3)
         assert stats["max_run_length"] == 2
-        assert stats["switch_rate"] == pytest.approx(2 / 4)
 
 
 class TestStrandBiasIndex:
